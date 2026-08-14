@@ -25,4 +25,4 @@ The scanner detects likely agent/model/tool references, canonical relationships 
 - deterministic findings with file/line evidence;
 - no network calls in the local P0 path.
 
-See [PROJECT_PLAN.md](PROJECT_PLAN.md), [TODO.md](TODO.md), [Архитектура MVP Agent Control Plane.txt](Архитектура%20MVP%20Agent%20Control%20Plane.txt) and [Security & Compliance Blueprint для Agent Control Plane.md](Security%20%26%20Compliance%20Blueprint%20для%20Agent%20Control%20Plane.md).
+Local planning, market research, roadmap, architecture and security preparation files are intentionally ignored by GitHub. The repository contains the working CLI, tests, fixtures and runtime configuration.
