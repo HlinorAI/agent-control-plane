@@ -45,6 +45,12 @@ CLI
 
 Целевой масштаб MVP: 10 design partners, 500–1 000 discovered agents, 25–50 workspaces и до 10 млн metadata/evidence events в месяц. Это target architecture, а не обязательный объём первого прототипа.
 
+## Security baseline
+
+`Security & Compliance Blueprint для Agent Control Plane.md` подключён как обязательная инженерная граница MVP. Discovery path работает read-only и не запускает чужой agent code, prompts, tool responses или repository hooks. Raw secrets и полные production payloads не сохраняются по умолчанию; OTel — metadata-only. Все relationships и findings должны иметь provenance, hash/timestamp и confidence, а критичные решения принимаются детерминированными rules, не LLM.
+
+До design-partner pilot обязательны: secret-redaction tests, parser resource limits, cross-workspace authorization tests, audit events для sensitive actions, documented retention/deletion behavior и outbound-only self-hosted runner.
+
 ## Критерий первого успеха
 
 Пользователь получает первый полезный finding менее чем за 30 минут после запуска сканирования.
@@ -86,4 +92,4 @@ CLI
 
 ## Статус
 
-Проект инициализирован. Рыночные материалы и шестимесячная roadmap подключены; исходный код ещё не создан.
+Проект инициализирован. Рыночные материалы, roadmap, архитектура и security blueprint подключены. Первый P0-срез Go CLI реализован; backend, collectors и risk rules расширяются следующим этапом.

@@ -5,6 +5,7 @@
 - [x] Подключить product roadmap и regional strategy к проектной документации.
 - [x] Зафиксировать WVPA как North Star Metric.
 - [x] Выбрать США/Канаду первым beachhead-регионом.
+- [x] Подключить security/compliance blueprint к проектным ограничениям.
 - [ ] Зафиксировать региональные exclusions и не смешивать evidence между рынками.
 - [ ] Определить минимальный набор полей для freshness/evidence completeness/owner verification.
 
@@ -23,31 +24,31 @@
 
 ### Проект и CLI
 
-- [ ] Инициализировать Go-модуль с командами и строгими настройками.
-- [ ] Создать команду `agentctl scan <path>`.
+- [x] Инициализировать Go-модуль с командами и строгими настройками.
+- [x] Создать команду `agentctl scan <path>`.
 - [ ] Добавить `agentctl init` для выбора workspace и approved sources.
-- [ ] Добавить параметры `--dry-run`, `--format json|text` и `--output`.
-- [ ] Возвращать ненулевой exit code при ошибке сканирования.
-- [ ] Не читать значения секретов и не отправлять данные наружу.
+- [x] Добавить параметры `--dry-run`, `--format json|text` и `--output`.
+- [x] Возвращать ненулевой exit code при ошибке сканирования.
+- [x] Не читать значения секретов и не отправлять данные наружу.
 
 ### Контракт данных
 
-- [ ] Описать типы `Repository`, `Agent`, `Model`, `Tool`, `Identity`, `Finding`, `Evidence`.
-- [ ] Определить стабильные ID и правила дедупликации сущностей.
-- [ ] Зафиксировать JSON-схему отчёта.
-- [ ] Добавить версию схемы отчёта.
+- [x] Описать типы `Agent`, `Tool`, `Finding`, `Evidence` для первого CLI-среза.
+- [x] Определить стабильные ID и базовые правила дедупликации сущностей.
+- [x] Зафиксировать JSON-схему отчёта первого CLI-среза.
+- [x] Добавить версию схемы отчёта.
 - [ ] Описать canonical relationships и типы evidence/confidence.
 - [ ] Добавить OpenAPI 3.1 contract для будущего ingestion/API слоя.
 
 ### Git collector
 
-- [ ] Сканировать только разрешённый root path.
+- [x] Сканировать только разрешённый root path.
 - [ ] Определять вероятные agent entrypoints по конфигурации и импортам.
 - [ ] Извлекать model provider/model name.
 - [ ] Извлекать tool definitions и references на MCP.
 - [ ] Определять repository path и environment, если они явно указаны.
-- [ ] Сохранять путь файла и номер строки как evidence.
-- [ ] Показывать в dry-run список прочитанных файлов.
+- [x] Сохранять путь файла и номер строки как evidence.
+- [x] Показывать в dry-run список прочитанных файлов.
 
 ### Source collectors
 
@@ -59,15 +60,24 @@
 ### Отчёт
 
 - [ ] Выводить количество найденных агентов, tools и identities.
-- [ ] Выводить findings с severity, message и evidence.
-- [ ] Поддержать JSON-отчёт, пригодный для дальнейшего dashboard/API.
-- [ ] Поддержать читаемый text-отчёт для терминала.
+- [x] Выводить findings с severity, message и evidence.
+- [x] Поддержать JSON-отчёт, пригодный для дальнейшего dashboard/API.
+- [x] Поддержать читаемый text-отчёт для терминала.
 
 ### Privacy boundary
 
-- [ ] Добавить allowlist root paths и запрет выхода за scan root.
-- [ ] Исключить secret values из parser outputs.
-- [ ] Документировать, какие metadata и payloads не покидают локальную среду.
+- [x] Добавить allowlist root paths и запрет выхода за scan root.
+- [x] Исключить secret values из parser outputs.
+- [x] Документировать, какие metadata и payloads не покидают локальную среду.
+- [ ] Зафиксировать правило: discovery не выполняет repository hooks, scripts, prompts или agent/tool instructions.
+- [ ] Добавить file/archive/AST depth/time/resource limits для parser’ов.
+- [ ] Подготовить corpus для secret redaction и negative tests.
+
+### Security P0 gate
+
+- [ ] Проверить read-only behavior на fixture repository с malicious setup/postinstall/Dockerfile.
+- [ ] Проверить, что raw secrets не попадают в JSON report и evidence.
+- [ ] Не добавлять LLM в critical risk decision path.
 
 ### North Star instrumentation
 
@@ -75,6 +85,11 @@
 - [ ] Рассчитывать Time to First Verified Agent и Time to First Finding.
 - [ ] Рассчитывать production-agent coverage и evidence completeness.
 - [ ] Рассчитывать weekly repeat scan rate и high-risk remediation rate.
+
+### Security instrumentation
+
+- [ ] Зафиксировать audit events для auth, evidence access, finding, policy и exception changes.
+- [ ] Добавить negative cross-workspace authorization tests до hosted pilot.
 
 ## P1 — подтверждение продуктовой ценности
 
@@ -127,6 +142,9 @@
 - [ ] Добавить Redis Streams job queue только после подтверждения async scan workload.
 - [ ] Добавить signed batch ingestion и tenant isolation.
 - [ ] Добавить S3-compatible evidence storage с redaction metadata.
+- [ ] Добавить signed batches, nonce, expiry и replay protection.
+- [ ] Добавить object-level workspace authorization и negative cross-tenant tests.
+- [ ] Добавить append-only audit events для auth, evidence, finding, policy и exception changes.
 
 ### MCP и infrastructure collectors
 
@@ -146,10 +164,12 @@
 ### Fixtures и тесты
 
 - [ ] Создать demo repository с 5–10 намеренными рисками.
-- [ ] Добавить unit-тесты для parser’ов.
+- [x] Добавить unit-тесты для parser’ов.
 - [ ] Добавить fixture-тесты для каждого risk rule.
 - [ ] Добавить smoke-тест полного `agentctl scan`.
 - [ ] Проверить повторный запуск: одинаковые входы дают стабильный отчёт.
+- [ ] Добавить fuzz/property tests для YAML/JSON/MCP parsers.
+- [ ] Добавить integration tests с PostgreSQL и connector failure paths.
 
 ### Пользовательский результат
 
@@ -188,3 +208,6 @@
 - Найденные сущности представлены в стабильном JSON-формате.
 - Минимум три risk rule возвращают findings с file/line evidence.
 - Есть автоматические тесты parser’ов, rules и полного сканирования.
+- Первый P0 CLI-срез покрыт тестами и проверен через `go test ./...` и `go vet ./...`.
+- Discovery не выполняет произвольный код и не отправляет данные наружу.
+- Security-sensitive input считается untrusted data и ограничен по размеру/времени.
