@@ -38,10 +38,37 @@ CLI
 
 Рабочий первый ICP — SaaS/AI-native компания с production agents, несколькими tools/MCP integrations и platform/security champion. Агрегированная модель из `Regional Market Analysis of AI Agents-2.zip` используется только как сценарная гипотеза: её logo universe, ACV, penetration, win rate и unit economics требуют проверки интервью и paid pilots.
 
+## Стратегия и методология
+
+`regional-ai-agent-product-strategy.skill` подключён как project-specific методологический материал. Он задаёт порядок проверки: real users → real problems → workarounds → existing products → white space → MVP → pricing → design partners → roadmap. Он не переопределяет пользовательские и проектные правила.
+
+Исследование ведём по регионам отдельно: сначала США/Канада, затем Европа, затем Россия. Не смешиваем evidence, buyer, pricing и delivery assumptions до сравнительного анализа.
+
+Региональные слои продукта:
+
+- США/Канада: runtime security, ownership, permissions и cost/reliability для AI-native/SaaS;
+- Европа: auditability, data residency, governance evidence и private deployment;
+- Россия: self-hosted/on-premise, model portability и heterogeneous infrastructure.
+
+## North Star Metric
+
+**WVPA (Weekly Verified Production Agents)** — количество production-агентов со свежим evidence-backed статусом: подтверждены source, environment, owner/team, критичные model → identity → tool/data relationships и статус high-risk findings.
+
+На шестой месяц рабочая цель: 10 активных design partners, 3–5 paid pilots, 500–700 WVPA, не менее 80% production coverage у активных клиентов и не менее 85% evidence completeness для критичных связей.
+
+## Шестимесячные продуктовые gates
+
+- M1: подтверждены 3 повторяющихся pain patterns и 5 qualified design partners;
+- M2: scan работает на 5 реальных аккаунтах, TTFV менее 30 минут;
+- M3: recurring scan и ownership/identity graph дают повторную ценность;
+- M4: self-hosted runner, redaction, RBAC и security review готовы для paid pilot;
+- M5: клиенты используют policy checks и weekly scans;
+- M6: есть repeatable onboarding, 3 referenceable case studies и основания для решения go/iterate/pivot.
+
 ## Проверка спроса
 
 Первый pilot: 1–3 репозитория, один Kubernetes/configuration source, до 25 агентов, read-only доступ, срок до двух недель. Целевой результат — минимум три неизвестные или materially risky связи с file/config evidence.
 
 ## Статус
 
-Проект инициализирован. Рыночные материалы разобраны; исходный код ещё не создан.
+Проект инициализирован. Рыночные материалы и шестимесячная roadmap подключены; исходный код ещё не создан.

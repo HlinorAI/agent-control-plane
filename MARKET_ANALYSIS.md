@@ -91,3 +91,42 @@ Census SUSB и Statistics Canada в заметках используются к
 
 За 60 минут подключить read-only scanner к одному репозиторию и одному источнику конфигурации, вернуть inventory агентов, tools, identities и owners, а также top findings с evidence. Secret values не извлекать, production не изменять. Успех — минимум три неизвестные или materially risky связи, найденные за один рабочий день.
 
+## Дополнительные материалы и адаптация стратегии
+
+Второй архив и roadmap уточняют не сам выбор продукта, а порядок его проверки:
+
+- первый beachhead — США/Канада, AI-native/SaaS компании с 20–200 агентами;
+- Европа — следующий слой с упором на auditability, data residency и private deployment;
+- Россия — отдельный on-premise/self-hosted сценарий, не продолжение основной SaaS-модели;
+- observability-only и ещё один trace dashboard считаются commoditizing-направлением;
+- white space — vendor-neutral graph и operational workflow между developer, platform и security teams.
+
+### Новая North Star
+
+Roadmap предлагает WVPA — Weekly Verified Production Agents. Метрика полезнее простого количества inventory cards, потому что требует свежего evidence, подтверждённого production status, owner и статуса критичных findings.
+
+### Рабочие цели M6
+
+| Метрика | Цель |
+|---|---:|
+| Активные design partners | 10 |
+| Paid pilots | 3–5 |
+| Discovered agents | 800–1 000 |
+| WVPA | 500–700 |
+| Production coverage у активных клиентов | ≥80% |
+| Evidence completeness критичных связей | ≥85% |
+| High-risk remediation/accepted risk за 14 дней | ≥30% |
+
+Это targets из пользовательских материалов, а не подтверждённые результаты.
+
+### Evidence caveat
+
+Второй архив содержит claims CSA, Cleanlab, European Commission, Банка России, Yakov & Partners/Yandex и vendor sources. В этот раз они не перепроверялись через интернет; в проекте они учитываются как claims, указанные в исследовательском материале, пока не будет выполнена отдельная source verification. Vendor evidence не считаем независимым подтверждением без cross-check.
+
+### Что адаптируем в продукте
+
+1. В MVP добавляем freshness, evidence completeness и ownership verification как поля первого класса.
+2. В backlog переносим recurring scan и WVPA раньше dashboard polish.
+3. Для US/Canada готовим developer-first CLI и remediation workflow.
+4. Для Europe заранее проектируем redaction, private deployment и audit export.
+5. Для Russia оставляем отдельный validation track: self-hosted runner, local models и model portability.

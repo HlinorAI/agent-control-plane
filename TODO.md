@@ -1,5 +1,13 @@
 # Backlog
 
+## Strategy alignment
+
+- [x] Подключить product roadmap и regional strategy к проектной документации.
+- [x] Зафиксировать WVPA как North Star Metric.
+- [x] Выбрать США/Канаду первым beachhead-регионом.
+- [ ] Зафиксировать региональные exclusions и не смешивать evidence между рынками.
+- [ ] Определить минимальный набор полей для freshness/evidence completeness/owner verification.
+
 ## P0 — критично для первого работающего прототипа
 
 ### Product validation
@@ -9,6 +17,9 @@
 - [ ] Подготовить 10–15 problem-interview вопросов.
 - [ ] Составить проверяемый shortlist из 10 потенциальных design partners.
 - [ ] Согласовать scope read-only diagnostic и критерий трёх полезных findings.
+- [ ] Провести 15–20 интервью в первом beachhead-регионе.
+- [ ] Подтвердить минимум 3 повторяющихся pain patterns.
+- [ ] Получить 5 qualified design partners до перехода к полноценной разработке.
 
 ### Проект и CLI
 
@@ -48,7 +59,31 @@
 - [ ] Исключить secret values из parser outputs.
 - [ ] Документировать, какие metadata и payloads не покидают локальную среду.
 
+### North Star instrumentation
+
+- [ ] Определить событие `agent_verified` и условия его засчёта в WVPA.
+- [ ] Рассчитывать Time to First Verified Agent и Time to First Finding.
+- [ ] Рассчитывать production-agent coverage и evidence completeness.
+- [ ] Рассчитывать weekly repeat scan rate и high-risk remediation rate.
+
 ## P1 — подтверждение продуктовой ценности
+
+### Six-month roadmap
+
+- [ ] M1: threat model, data retention policy, `agentctl init`, local JSON report и low-fidelity flows.
+- [ ] M2: GitHub/GitLab, Docker/Kubernetes и MCP sources; 10 risk rules; первый dashboard.
+- [ ] M3: OTel metadata, ownership mapping, recurring scan, change detection и issue workflow.
+- [ ] M4: self-hosted runner, Helm, redaction, audit log, SSO/RBAC и paid pilot package.
+- [ ] M5: policy-as-code, public read API, webhooks и CI check.
+- [ ] M6: stable v1, public docs, sample reports, case studies и go/iterate/pivot review.
+- [ ] На каждом gate фиксировать exit criteria, а не только shipped features.
+
+### Regional packaging
+
+- [ ] Подготовить US/Canada developer-first CLI и cloud-first pilot.
+- [ ] Подготовить Europe requirements: private deployment, audit export, data residency.
+- [ ] Отдельно проверить Russia requirements: on-premise, local models, model portability.
+- [ ] Не переносить pricing, buyers и sales-cycle assumptions между регионами.
 
 ### Market evidence
 
