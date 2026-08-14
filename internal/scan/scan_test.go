@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/HlinorAI/agent-control-plane/internal/config"
 )
 
 func TestRunDetectsAgentAndOwnerGapWithoutEmittingSecret(t *testing.T) {
@@ -140,5 +142,50 @@ func TestRunProducesStableReport(t *testing.T) {
 	}
 	if string(firstJSON) != string(secondJSON) {
 		t.Fatalf("same inputs produced different reports\nfirst: %s\nsecond: %s", firstJSON, secondJSON)
+	}
+}
+
+func TestRunUsesWorkspacePolicyConfig(t *testing.T) {
+	root := t.TempDir()
+	agentPath := filepath.Join(root, "agent.py")
+	if err := os.WriteFile(agentPath, []byte("name: policy-agent\nmodel: internal-provider/model-x\nenvironment: production\nmcp_server: approved-crm\nlast_verified: 2026-08-10\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ignoredDir := filepath.Join(root, "ignored")
+	if err := os.MkdirAll(ignoredDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(ignoredDir, "agent.py"), []byte("model: unapproved-provider\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	policyPath := filepath.Join(root, ".agentctl", "config.yaml")
+	policy := config.Default(".")
+	policy.Exclude = append(policy.Exclude, "ignored")
+	policy.FreshnessDays = 1
+	policy.ApprovedProviders = []string{"internal-provider"}
+	policy.ApprovedMCPServers = []string{"approved-crm"}
+	if err := config.WriteDefault(policyPath, policy); err != nil {
+		t.Fatal(err)
+	}
+	report, err := Run(root, Options{ConfigPath: policyPath})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.FilesScanned != 1 {
+		t.Fatalf("policy exclusion was not applied: %+v", report.ReadFiles)
+	}
+	for _, finding := range report.Findings {
+		if finding.RuleID == "ACP-005" || finding.RuleID == "ACP-008" {
+			t.Fatalf("workspace policy was not applied: %+v", report.Findings)
+		}
+	}
+	foundStale := false
+	for _, finding := range report.Findings {
+		if finding.RuleID == "ACP-010" {
+			foundStale = true
+		}
+	}
+	if !foundStale {
+		t.Fatalf("freshness policy did not affect stale verification: %+v", report.Findings)
 	}
 }

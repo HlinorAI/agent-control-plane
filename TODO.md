@@ -26,7 +26,7 @@
 
 - [x] Инициализировать Go-модуль с командами и строгими настройками.
 - [x] Создать команду `agentctl scan <path>`.
-- [ ] Добавить `agentctl init` для выбора workspace и approved sources.
+- [x] Добавить `agentctl init` для выбора workspace и approved sources.
 - [x] Добавить параметры `--dry-run`, `--format json|text` и `--output`.
 - [x] Возвращать ненулевой exit code при ошибке сканирования.
 - [x] Не читать значения секретов и не отправлять данные наружу.
@@ -59,7 +59,7 @@
 
 ### Отчёт
 
-- [ ] Выводить количество найденных агентов, tools и identities.
+- [x] Выводить количество найденных агентов, tools и identities.
 - [x] Выводить findings с severity, message и evidence.
 - [x] Поддержать JSON-отчёт, пригодный для дальнейшего dashboard/API.
 - [x] Поддержать читаемый text-отчёт для терминала.
@@ -132,8 +132,8 @@
 - [x] Реализовать `ACP-010`: stale agent/identity.
 - [ ] Реализовать `ACP-011`: duplicate agents одной capability.
 - [ ] Реализовать `ACP-012`: schema change без owner acknowledgement.
-- [ ] Для каждого finding показывать доказательство и confidence score.
-- [ ] Добавить конфигурацию approved owners/providers/servers.
+- [x] Для каждого finding показывать доказательство и confidence score.
+- [x] Добавить конфигурацию approved owners/providers/servers.
 
 ### Backend foundation
 

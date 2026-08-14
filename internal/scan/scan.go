@@ -11,6 +11,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/HlinorAI/agent-control-plane/internal/config"
 )
 
 const (
@@ -91,6 +93,18 @@ func Run(root string, options Options) (Report, error) {
 	if !info.IsDir() {
 		return Report{}, errors.New("scan root must be a directory")
 	}
+	policy := config.Default(".")
+	if options.ConfigPath != "" {
+		loaded, err := config.Load(options.ConfigPath)
+		if err != nil {
+			return Report{}, err
+		}
+		policy = loaded
+	}
+	freshnessDays := policy.FreshnessDays
+	if freshnessDays <= 0 {
+		freshnessDays = 30
+	}
 
 	report := Report{
 		SchemaVersion: schemaVersion,
@@ -110,7 +124,7 @@ func Run(root string, options Options) (Report, error) {
 			return nil
 		}
 		if entry.IsDir() {
-			if ignoredDirectory(entry.Name()) {
+			if ignoredDirectory(entry.Name()) || excludedDirectory(entry.Name(), policy.Exclude) {
 				return fs.SkipDir
 			}
 			return nil
@@ -162,6 +176,12 @@ func Run(root string, options Options) (Report, error) {
 		for _, provider := range item.approvedProviders {
 			approvedProviders[strings.ToLower(provider)] = true
 		}
+	}
+	for _, server := range policy.ApprovedMCPServers {
+		approvedServers[strings.ToLower(server)] = true
+	}
+	for _, provider := range policy.ApprovedProviders {
+		approvedProviders[strings.ToLower(provider)] = true
 	}
 
 	sourceNames := map[string]bool{}
@@ -335,7 +355,7 @@ func Run(root string, options Options) (Report, error) {
 				RemediationHint: "Document and test a safe disable, rollback, or kill-switch procedure for the production agent.",
 			})
 		}
-		if staleVerification(item.verifiedAt) {
+		if staleVerification(item.verifiedAt, freshnessDays) {
 			report.Findings = append(report.Findings, Finding{
 				ID: stableID("finding", agentID+":ACP-010"), RuleID: "ACP-010", Severity: "Medium",
 				Message: "Agent verification metadata is stale",
@@ -542,11 +562,20 @@ func supportedFile(path, name string) bool {
 
 func ignoredDirectory(name string) bool {
 	switch name {
-	case ".git", ".hg", ".svn", "node_modules", "vendor", "dist", "build", ".venv", "__pycache__":
+	case ".agentctl", ".git", ".hg", ".svn", "node_modules", "vendor", "dist", "build", ".venv", "__pycache__":
 		return true
 	default:
 		return false
 	}
+}
+
+func excludedDirectory(name string, exclusions []string) bool {
+	for _, exclusion := range exclusions {
+		if strings.EqualFold(strings.Trim(strings.TrimSpace(exclusion), "/"), name) {
+			return true
+		}
+	}
+	return false
 }
 
 func declarationValue(line string, pattern *regexp.Regexp) string {
@@ -638,15 +667,18 @@ func modelProvider(model string) string {
 	return lower
 }
 
-func staleVerification(value string) bool {
+func staleVerification(value string, freshnessDays int) bool {
 	if value == "" || value == "unknown" {
 		return false
+	}
+	if freshnessDays <= 0 {
+		freshnessDays = 30
 	}
 	verifiedAt, err := time.Parse("2006-01-02", strings.TrimSpace(value))
 	if err != nil {
 		return false
 	}
-	return time.Since(verifiedAt) > 30*24*time.Hour
+	return time.Since(verifiedAt) > time.Duration(freshnessDays)*24*time.Hour
 }
 
 func stableID(kind, value string) string {

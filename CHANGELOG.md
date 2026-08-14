@@ -25,3 +25,7 @@
 - Реализованы explainable risk rules `ACP-006`–`ACP-010`: production credential в development, sensitive tool без approval, provider policy violation, отсутствие disable/rollback path и stale verification.
 - Расширены demo fixtures и тесты всех десяти правил, canonical relationships, secret boundary и стабильности отчёта.
 - Синхронизирован Go module path с приватным репозиторием `github.com/HlinorAI/agent-control-plane`.
+
+- Добавлена команда `agentctl init <path>`, создающая policy-файл `.agentctl/config.yaml` без перезаписи существующей конфигурации.
+- Подключены policy exclusions, approved providers/MCP servers и настраиваемый freshness TTL к `agentctl scan`.
+- Добавлены тесты init, config parsing, границы scan root и применения workspace policy.

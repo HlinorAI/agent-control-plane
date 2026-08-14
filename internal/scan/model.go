@@ -9,7 +9,8 @@ import (
 const schemaVersion = "0.1"
 
 type Options struct {
-	DryRun bool
+	DryRun     bool
+	ConfigPath string
 }
 
 type Report struct {

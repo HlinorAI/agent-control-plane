@@ -7,9 +7,12 @@ Read-only discovery and evidence-backed inventory for internal AI agents.
 The first slice is a local Go CLI. It reads approved text/configuration files, never executes repository contents, never sends data over the network, and emits only metadata and source locators.
 
 ```bash
+go run ./cmd/agentctl init .
 go run ./cmd/agentctl scan . --dry-run
 go run ./cmd/agentctl scan . --format json
 ```
+
+`agentctl init` creates `.agentctl/config.yaml` with workspace policy, exclusions and a 30-day verification freshness TTL. Existing configuration is never overwritten. `agentctl scan` loads this file automatically when it exists; use `--config` to select another policy file inside the scan root.
 
 The scanner detects likely agent/model/tool references, canonical relationships and explainable `ACP-001`–`ACP-010` findings. It is intentionally heuristic and does not claim production status without source evidence. The current MCP collector reads server names, approval registry entries and safe transport/auth/tool metadata without reading secret values.
 
