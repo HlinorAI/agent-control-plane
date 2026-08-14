@@ -27,7 +27,7 @@ func Default(workspaceRoot string) Config {
 		Version:            "1",
 		WorkspaceRoot:      workspaceRoot,
 		FreshnessDays:      30,
-		Exclude:            []string{".agentctl", ".git", ".hg", ".svn", "node_modules", "vendor", "dist", "build", ".venv", "__pycache__"},
+		Exclude:            []string{".agentctl", ".claude", ".github", ".git", ".hg", ".svn", ".storybook", "__tests__", "e2e", "test-servers", "node_modules", "vendor", "dist", "build", ".venv", "__pycache__", "examples", "example", "tests", "test", "testdata", "fixtures", "benchmarks", "docs", "doc", "schemas", "schema"},
 		ApprovedOwners:     []string{},
 		ApprovedProviders:  []string{},
 		ApprovedMCPServers: []string{},

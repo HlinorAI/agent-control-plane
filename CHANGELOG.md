@@ -30,3 +30,4 @@
 - Подключены policy exclusions, approved providers/MCP servers и настраиваемый freshness TTL к `agentctl scan`.
 - Добавлены тесты init, config parsing, границы scan root и применения workspace policy.
 - Сужены эвристики declarations и добавлена защита от инвентаризации собственного scanner implementation; root scan больше не создаёт ложные findings из `internal/scan` и тестов.
+- По результатам сторонних публичных MCP-репозиториев добавлены production-path filters, разделение runtime code/runtime metadata и безопасное чтение `.mcp.json`/`server.json` с server, transport и auth metadata.

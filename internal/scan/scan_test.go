@@ -122,6 +122,75 @@ MCP_TOOL = "internal"
 	}
 }
 
+func TestRunIgnoresFixturesAndRuntimeImplementationCode(t *testing.T) {
+	root := t.TempDir()
+	exampleDir := filepath.Join(root, "examples")
+	if err := os.MkdirAll(exampleDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(exampleDir, "agent.py"), []byte("name: example-agent\nmodel: openai\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	runtimeDir := filepath.Join(root, "runtime")
+	if err := os.MkdirAll(runtimeDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(runtimeDir, "runner.py"), []byte("name: runtime-worker\nmodel: openai\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(runtimeDir, "agents.json"), []byte("name: runtime-agent\nmodel: openai\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	report, err := Run(root, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(report.Agents) != 0 || len(report.Sources) != 1 {
+		t.Fatalf("fixture/runtime implementation code was inventoried: %+v", report)
+	}
+	if len(report.Findings) != 1 || report.Findings[0].RuleID != "ACP-002" {
+		t.Fatalf("expected only runtime metadata drift finding: %+v", report.Findings)
+	}
+}
+
+func TestRunCollectsMCPJSONMetadata(t *testing.T) {
+	root := t.TempDir()
+	clientConfig := `{"mcpServers":{"docs":{"type":"http","url":"https://example.test/mcp"}}}`
+	if err := os.WriteFile(filepath.Join(root, ".mcp.json"), []byte(clientConfig), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	serverManifest := `{"name":"io.example/demo-server","packages":[{"transport":{"type":"stdio"}}],"remotes":[{"type":"streamable-http","headers":[{"name":"Authorization","isSecret":true}]}]}`
+	if err := os.WriteFile(filepath.Join(root, "server.json"), []byte(serverManifest), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	report, err := Run(root, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(report.MCPServers) != 2 || len(report.Sources) != 2 || len(report.Agents) != 0 {
+		t.Fatalf("unexpected MCP metadata inventory: %+v", report)
+	}
+	servers := map[string]string{}
+	for _, server := range report.MCPServers {
+		servers[server.Name] = server.Transport
+	}
+	if servers["docs"] != "http" || servers["io.example/demo-server"] != "stdio" {
+		t.Fatalf("unexpected MCP transports: %+v", servers)
+	}
+	for _, server := range report.MCPServers {
+		if server.Name == "io.example/demo-server" && server.AuthMethod != "header" {
+			t.Fatalf("expected safe header auth metadata: %+v", server)
+		}
+	}
+	encoded, err := json.Marshal(report)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(encoded), "Authorization") || strings.Contains(string(encoded), "example.test/mcp") {
+		t.Fatalf("MCP report leaked config payload: %s", encoded)
+	}
+}
+
 func TestRunDemoFixtureFindsRiskRulesAndCanonicalRelationships(t *testing.T) {
 	report, err := Run(filepath.Join("..", "..", "testdata", "demo"), Options{})
 	if err != nil {

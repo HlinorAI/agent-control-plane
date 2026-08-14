@@ -3,12 +3,14 @@ package scan
 import (
 	"bufio"
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -29,7 +31,7 @@ var (
 	frameworkPattern            = regexp.MustCompile(`(?i)(langgraph|langchain|crewai|autogen|pydantic[_ -]?ai)`)
 	ownerPattern                = regexp.MustCompile(`(?im)^\s*(owner|team|maintainer)\s*[:=]`)
 	namePattern                 = regexp.MustCompile(`(?im)^\s*["']?(agent[_ -]?(name|id)|name)["']?\s*[:=]`)
-	identityPattern             = regexp.MustCompile(`(?im)^\s*["']?(identity|service[_ -]?account|principal|role)["']?\s*[:=]`)
+	identityPattern             = regexp.MustCompile(`(?im)^\s*["']?(identity|service[_ -]?account|principal)["']?\s*[:=]`)
 	mcpPattern                  = regexp.MustCompile(`(?im)^\s*["']?(mcp[_ -]+server|server[_ -]+name)["']?\s*[:=]`)
 	listItemPattern             = regexp.MustCompile(`^\s*-\s*["']?([A-Za-z0-9._:/-]+)`)
 	environmentPattern          = regexp.MustCompile(`(?im)^\s*["']?(environment|env)["']?\s*[:=]\s*["']?(production|prod|development|dev)["']?\s*$`)
@@ -65,6 +67,7 @@ type candidate struct {
 	owner                string
 	environment          string
 	environmentExplicit  bool
+	nameExplicit         bool
 	readOnly             bool
 	writeScope           bool
 	permissionLine       int
@@ -187,7 +190,7 @@ func Run(root string, options Options) (Report, error) {
 
 	sourceNames := map[string]bool{}
 	for _, item := range candidates {
-		if item.kind != "runtime" && item.kind != "registry" && item.name != "" {
+		if item.kind != "runtime" && item.kind != "registry" && item.kind != "mcp" && item.name != "" {
 			sourceNames[strings.ToLower(item.name)] = true
 		}
 	}
@@ -198,6 +201,8 @@ func Run(root string, options Options) (Report, error) {
 		sourceType, trustLevel := "repository_file", "observed"
 		if item.kind == "runtime" {
 			sourceType, trustLevel = "runtime_metadata", "observed"
+		} else if item.kind == "mcp" {
+			sourceType, trustLevel = "mcp_metadata", "observed"
 		} else if item.kind == "registry" {
 			sourceType, trustLevel = "policy_registry", "declared"
 		}
@@ -207,6 +212,12 @@ func Run(root string, options Options) (Report, error) {
 	}
 
 	for _, item := range candidates {
+		if item.kind == "mcp" {
+			if !containsMCPServer(report.MCPServers, item.mcpServer) {
+				report.MCPServers = append(report.MCPServers, MCPServer{ID: stableID("mcp", strings.ToLower(item.mcpServer)), Name: item.mcpServer, Approved: approvedServers[strings.ToLower(item.mcpServer)], Transport: item.mcpTransport, AuthMethod: item.mcpAuthMethod, Tools: item.mcpTools, SourcePath: item.path})
+			}
+			continue
+		}
 		if item.kind == "registry" {
 			continue
 		}
@@ -389,8 +400,11 @@ func Run(root string, options Options) (Report, error) {
 }
 
 func inspectFile(path, relative string) (*candidate, error) {
-	if strings.HasSuffix(strings.ToLower(relative), "_test.go") {
+	if ignoredSourceFile(relative) {
 		return nil, nil
+	}
+	if candidate, err := inspectJSONMCPMetadata(path, relative); err != nil || candidate != nil {
+		return candidate, err
 	}
 	file, err := os.Open(path)
 	if err != nil {
@@ -404,6 +418,7 @@ func inspectFile(path, relative string) (*candidate, error) {
 	var models, tools []string
 	var owner, environment, name, identity, mcpServer string
 	environmentExplicit := false
+	nameExplicit := false
 	var mcpTransport, mcpAuthMethod, verifiedAt string
 	identityLine, mcpLine, permissionLine := 0, 0, 0
 	modelLine, credentialLine, sensitiveLine, disableLine, verifiedLine := 0, 0, 0, 0, 0
@@ -411,6 +426,8 @@ func inspectFile(path, relative string) (*candidate, error) {
 	productionCredential, sensitiveTool, approvalMetadata, disablePath := false, false, false, false
 	approvedServers, approvedProviders, mcpTools := []string{}, []string{}, []string{}
 	firstSignal := 0
+	frameworkSignal := false
+	modelDeclarationSignal := false
 	scannerImplementation := false
 	for scanner.Scan() {
 		lineNumber++
@@ -451,6 +468,7 @@ func inspectFile(path, relative string) (*candidate, error) {
 		}
 		if name == "" && declarationMatch(line, namePattern) {
 			name = declarationValue(line, namePattern)
+			nameExplicit = name != "" && name != "unknown"
 		}
 		if identity == "" && declarationMatch(line, identityPattern) {
 			identity = declarationValue(line, identityPattern)
@@ -490,6 +508,7 @@ func inspectFile(path, relative string) (*candidate, error) {
 			firstSignal = lineNumber
 		}
 		if declarationMatch(line, modelDeclaration) {
+			modelDeclarationSignal = true
 			if value := declarationValue(line, modelDeclaration); value != "" && value != "unknown" {
 				models = appendUnique(models, value)
 				if modelLine == 0 {
@@ -501,6 +520,9 @@ func inspectFile(path, relative string) (*candidate, error) {
 			if modelLine == 0 {
 				modelLine = lineNumber
 			}
+		}
+		if frameworkPattern.MatchString(line) {
+			frameworkSignal = true
 		}
 		if declarationMatch(line, toolPattern) {
 			tools = appendUnique(tools, toolLabel(line))
@@ -530,7 +552,7 @@ func inspectFile(path, relative string) (*candidate, error) {
 	if scannerImplementation {
 		return nil, nil
 	}
-	if firstSignal == 0 && identity == "" && mcpServer == "" && len(approvedServers) == 0 && len(approvedProviders) == 0 && !runtimePattern.MatchString(relative) {
+	if firstSignal == 0 && identity == "" && mcpServer == "" && len(approvedServers) == 0 && len(approvedProviders) == 0 && !runtimeMetadataPath(relative) {
 		return nil, nil
 	}
 	if name == "" {
@@ -539,8 +561,11 @@ func inspectFile(path, relative string) (*candidate, error) {
 	kind := "source"
 	if len(approvedServers) > 0 || len(approvedProviders) > 0 {
 		kind = "registry"
-	} else if runtimePattern.MatchString(relative) {
+	} else if runtimeMetadataPath(relative) {
 		kind = "runtime"
+	}
+	if kind == "source" && !isLikelyAgentCandidate(relative, name, nameExplicit, modelDeclarationSignal, frameworkSignal, models, identity, mcpServer, environmentExplicit) {
+		return nil, nil
 	}
 	if firstSignal == 0 {
 		firstSignal = 1
@@ -549,12 +574,120 @@ func inspectFile(path, relative string) (*candidate, error) {
 		path: relative, line: firstSignal, name: name, kind: kind, models: models, tools: tools,
 		identity: identity, identityLine: identityLine, mcpServer: mcpServer, mcpLine: mcpLine,
 		mcpTransport: mcpTransport, mcpAuthMethod: mcpAuthMethod, mcpTools: mcpTools,
-		owner: owner, environment: environment, environmentExplicit: environmentExplicit, readOnly: readOnly, writeScope: writeScope,
+		owner: owner, environment: environment, environmentExplicit: environmentExplicit, nameExplicit: nameExplicit, readOnly: readOnly, writeScope: writeScope,
 		permissionLine: permissionLine, approvedServers: approvedServers, approvedProviders: approvedProviders,
 		modelLine: modelLine, productionCredential: productionCredential, credentialLine: credentialLine,
 		sensitiveTool: sensitiveTool, sensitiveLine: sensitiveLine, approvalMetadata: approvalMetadata,
 		disablePath: disablePath, disableLine: disableLine, verifiedAt: verifiedAt, verifiedLine: verifiedLine,
 	}, nil
+}
+
+func inspectJSONMCPMetadata(path, relative string) (*candidate, error) {
+	base := strings.ToLower(filepath.Base(relative))
+	if base != ".mcp.json" && base != "server.json" {
+		return nil, nil
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var document map[string]any
+	if err := json.Unmarshal(data, &document); err != nil {
+		return nil, nil
+	}
+	if base == ".mcp.json" {
+		servers, ok := document["mcpServers"].(map[string]any)
+		if !ok || len(servers) == 0 {
+			return nil, nil
+		}
+		names := make([]string, 0, len(servers))
+		for name := range servers {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		name := names[0]
+		entry, _ := servers[name].(map[string]any)
+		transport := stringValue(entry["type"])
+		if transport == "" && stringValue(entry["url"]) != "" {
+			transport = "http"
+		}
+		return &candidate{
+			path: relative, line: lineForValue(data, name), name: name, kind: "mcp",
+			mcpServer: name, mcpLine: lineForValue(data, name), mcpTransport: transport,
+			mcpAuthMethod: jsonAuthMethod(entry),
+		}, nil
+	}
+
+	name := stringValue(document["name"])
+	if name == "" {
+		return nil, nil
+	}
+	transport := ""
+	if packages, ok := document["packages"].([]any); ok {
+		for _, rawPackage := range packages {
+			pkg, _ := rawPackage.(map[string]any)
+			transportBlock, _ := pkg["transport"].(map[string]any)
+			if transport = stringValue(transportBlock["type"]); transport != "" {
+				break
+			}
+		}
+	}
+	if transport == "" {
+		if remotes, ok := document["remotes"].([]any); ok && len(remotes) > 0 {
+			remote, _ := remotes[0].(map[string]any)
+			transport = stringValue(remote["type"])
+		}
+	}
+	return &candidate{
+		path: relative, line: lineForValue(data, name), name: name, kind: "mcp",
+		mcpServer: name, mcpLine: lineForValue(data, name), mcpTransport: transport,
+		mcpAuthMethod: jsonManifestAuthMethod(document),
+	}, nil
+}
+
+func stringValue(value any) string {
+	if text, ok := value.(string); ok {
+		return text
+	}
+	return ""
+}
+
+func jsonAuthMethod(entry map[string]any) string {
+	if _, ok := entry["headers"]; ok {
+		return "header"
+	}
+	if _, ok := entry["env"]; ok {
+		return "environment"
+	}
+	return ""
+}
+
+func jsonManifestAuthMethod(document map[string]any) string {
+	remotes, ok := document["remotes"].([]any)
+	if !ok || len(remotes) == 0 {
+		return ""
+	}
+	remote, _ := remotes[0].(map[string]any)
+	return jsonAuthMethod(remote)
+}
+
+func lineForValue(data []byte, value string) int {
+	if value == "" {
+		return 1
+	}
+	needle := []byte(value)
+	for index := 0; index+len(needle) <= len(data); index++ {
+		if string(data[index:index+len(needle)]) == value {
+			line := 1
+			for _, current := range data[:index] {
+				if current == '\n' {
+					line++
+				}
+			}
+			return line
+		}
+	}
+	return 1
 }
 
 func supportedFile(path, name string) bool {
@@ -571,11 +704,62 @@ func supportedFile(path, name string) bool {
 
 func ignoredDirectory(name string) bool {
 	switch name {
-	case ".agentctl", ".git", ".hg", ".svn", "node_modules", "vendor", "dist", "build", ".venv", "__pycache__":
+	case ".agentctl", ".claude", ".github", ".git", ".hg", ".svn", ".storybook", "__tests__", "e2e", "test-servers", "node_modules", "vendor", "dist", "build", ".venv", "__pycache__", "examples", "example", "tests", "test", "testdata", "fixtures", "benchmarks", "docs", "doc", "schemas", "schema":
 		return true
 	default:
 		return false
 	}
+}
+
+func ignoredSourceFile(relative string) bool {
+	base := strings.ToLower(filepath.Base(relative))
+	return strings.HasSuffix(base, "_test.go") || strings.Contains(base, ".test.") || strings.Contains(base, ".spec.") || strings.Contains(base, ".stories.")
+}
+
+func runtimeMetadataPath(relative string) bool {
+	if !runtimePattern.MatchString(relative) {
+		return false
+	}
+	switch strings.ToLower(filepath.Ext(relative)) {
+	case ".json", ".yaml", ".yml", ".toml":
+		return true
+	default:
+		return false
+	}
+}
+
+func isLikelyAgentCandidate(relative, name string, nameExplicit, modelDeclarationSignal, frameworkSignal bool, models []string, identity, mcpServer string, environmentExplicit bool) bool {
+	if identity != "" || mcpServer != "" || environmentExplicit {
+		return true
+	}
+	if nameExplicit && isAgentName(name) {
+		return true
+	}
+	if isAgentPath(relative) && (len(models) > 0 || frameworkSignal) {
+		return true
+	}
+	return modelDeclarationSignal && isAgentPath(relative)
+}
+
+func isAgentName(name string) bool {
+	lower := strings.ToLower(name)
+	for _, marker := range []string{"agent", "assistant", "copilot", "chatbot", "bot"} {
+		if strings.Contains(lower, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+func isAgentPath(relative string) bool {
+	for _, part := range strings.Split(strings.ToLower(filepath.ToSlash(relative)), "/") {
+		for _, marker := range []string{"agent", "assistant", "copilot", "chatbot", "bot", "crew", "autogen", "langgraph"} {
+			if strings.Contains(part, marker) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func excludedDirectory(name string, exclusions []string) bool {
