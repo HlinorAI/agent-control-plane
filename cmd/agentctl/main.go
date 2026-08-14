@@ -42,7 +42,8 @@ func run(args []string, stdout, stderr io.Writer) error {
 		return fmt.Errorf("unsupported format %q", *format)
 	}
 
-	report, err := scan.Run(fs.Arg(0), scan.Options{DryRun: *dryRun})
+	root := args[1]
+	report, err := scan.Run(root, scan.Options{DryRun: *dryRun})
 	if err != nil {
 		return err
 	}

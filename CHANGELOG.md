@@ -14,3 +14,4 @@
 - Добавлены архитектурные артефакты и зафиксированы Go/PostgreSQL/Redis Streams/OTel metadata-only решения для MVP.
 - Подключён Security & Compliance Blueprint: read-only, no arbitrary code execution, redaction, provenance, audit и tenant-isolation gates.
 - Реализован первый P0 Go CLI-срез `agentctl scan` с JSON/text output, dry-run, evidence и `ACP-001` owner-gap finding.
+- Добавлены demo fixtures и первые пять explainable risk rules: `ACP-001`–`ACP-005`.

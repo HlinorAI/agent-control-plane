@@ -13,15 +13,17 @@ type Options struct {
 }
 
 type Report struct {
-	SchemaVersion string    `json:"schema_version"`
-	Root          string    `json:"root"`
-	ReadOnly      bool      `json:"read_only"`
-	MetadataOnly  bool      `json:"metadata_only"`
-	FilesScanned  int       `json:"files_scanned"`
-	FilesSkipped  int       `json:"files_skipped"`
-	Agents        []Agent   `json:"agents"`
-	Findings      []Finding `json:"findings"`
-	ReadFiles     []string  `json:"read_files,omitempty"`
+	SchemaVersion string      `json:"schema_version"`
+	Root          string      `json:"root"`
+	ReadOnly      bool        `json:"read_only"`
+	MetadataOnly  bool        `json:"metadata_only"`
+	FilesScanned  int         `json:"files_scanned"`
+	FilesSkipped  int         `json:"files_skipped"`
+	Agents        []Agent     `json:"agents"`
+	Identities    []Identity  `json:"identities,omitempty"`
+	MCPServers    []MCPServer `json:"mcp_servers,omitempty"`
+	Findings      []Finding   `json:"findings"`
+	ReadFiles     []string    `json:"read_files,omitempty"`
 }
 
 type Agent struct {
@@ -30,9 +32,24 @@ type Agent struct {
 	SourcePath  string   `json:"source_path"`
 	Models      []string `json:"models,omitempty"`
 	Tools       []string `json:"tools,omitempty"`
+	Identity    string   `json:"identity,omitempty"`
+	MCPServer   string   `json:"mcp_server,omitempty"`
 	Environment string   `json:"environment,omitempty"`
 	Owner       string   `json:"owner,omitempty"`
 	Confidence  float64  `json:"confidence"`
+}
+
+type Identity struct {
+	ID         string `json:"id"`
+	Name       string `json:"name"`
+	SourcePath string `json:"source_path"`
+}
+
+type MCPServer struct {
+	ID         string `json:"id"`
+	Name       string `json:"name"`
+	Approved   bool   `json:"approved"`
+	SourcePath string `json:"source_path"`
 }
 
 type Finding struct {
@@ -53,7 +70,7 @@ type Evidence struct {
 
 func (r Report) Text() string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "Agent Control Plane scan\nRoot: %s\nRead-only: %t\nMetadata-only: %t\nFiles: %d scanned, %d skipped\nAgents: %d\nFindings: %d\n", r.Root, r.ReadOnly, r.MetadataOnly, r.FilesScanned, r.FilesSkipped, len(r.Agents), len(r.Findings))
+	fmt.Fprintf(&b, "Agent Control Plane scan\nRoot: %s\nRead-only: %t\nMetadata-only: %t\nFiles: %d scanned, %d skipped\nAgents: %d\nIdentities: %d\nMCP servers: %d\nFindings: %d\n", r.Root, r.ReadOnly, r.MetadataOnly, r.FilesScanned, r.FilesSkipped, len(r.Agents), len(r.Identities), len(r.MCPServers), len(r.Findings))
 	if len(r.ReadFiles) > 0 {
 		b.WriteString("\nRead files:\n")
 		for _, path := range r.ReadFiles {

@@ -44,9 +44,9 @@
 
 - [x] Сканировать только разрешённый root path.
 - [ ] Определять вероятные agent entrypoints по конфигурации и импортам.
-- [ ] Извлекать model provider/model name.
-- [ ] Извлекать tool definitions и references на MCP.
-- [ ] Определять repository path и environment, если они явно указаны.
+- [x] Извлекать model provider/model name в первом heuristic collector.
+- [x] Извлекать tool definitions и references на MCP в первом heuristic collector.
+- [x] Определять environment и canonical agent name, если они явно указаны.
 - [x] Сохранять путь файла и номер строки как evidence.
 - [x] Показывать в dry-run список прочитанных файлов.
 
@@ -120,11 +120,11 @@
 
 ### Risk engine
 
-- [ ] Реализовать `ACP-001`: production agent без owner/team.
-- [ ] Реализовать `ACP-002`: runtime agent отсутствует в source inventory.
-- [ ] Реализовать `ACP-003`: один identity используется unrelated agents.
-- [ ] Реализовать `ACP-004`: write/admin scope при read-only use case.
-- [ ] Реализовать `ACP-005`: MCP server отсутствует в approved registry.
+- [x] Реализовать `ACP-001`: production agent без owner/team.
+- [x] Реализовать `ACP-002`: runtime agent отсутствует в source inventory.
+- [x] Реализовать `ACP-003`: один identity используется unrelated agents.
+- [x] Реализовать `ACP-004`: write/admin scope при read-only use case.
+- [x] Реализовать `ACP-005`: MCP server отсутствует в approved registry.
 - [ ] Реализовать `ACP-006`: production credential в development.
 - [ ] Реализовать `ACP-007`: sensitive tool без approval metadata.
 - [ ] Реализовать `ACP-008`: provider/model нарушает workspace policy.
@@ -148,7 +148,7 @@
 
 ### MCP и infrastructure collectors
 
-- [ ] Добавить чтение распространённых MCP config formats.
+- [x] Добавить чтение базового MCP server/approved-registry формата.
 - [ ] Извлекать server, transport, auth method и tool names.
 - [ ] Добавить Docker Compose collector.
 - [ ] Добавить Kubernetes Deployment/ServiceAccount collector.
@@ -163,17 +163,17 @@
 
 ### Fixtures и тесты
 
-- [ ] Создать demo repository с 5–10 намеренными рисками.
+- [x] Создать demo repository с намеренными рисками для `ACP-001`–`ACP-005`.
 - [x] Добавить unit-тесты для parser’ов.
 - [ ] Добавить fixture-тесты для каждого risk rule.
-- [ ] Добавить smoke-тест полного `agentctl scan`.
+- [x] Добавить smoke-тест полного `agentctl scan`.
 - [ ] Проверить повторный запуск: одинаковые входы дают стабильный отчёт.
 - [ ] Добавить fuzz/property tests для YAML/JSON/MCP parsers.
 - [ ] Добавить integration tests с PostgreSQL и connector failure paths.
 
 ### Пользовательский результат
 
-- [ ] Подготовить README с установкой и первым запуском.
+- [x] Подготовить README с установкой и первым запуском.
 - [ ] Показать первый полезный finding менее чем за 30 минут.
 - [ ] Добавить экспорт findings в CSV.
 - [ ] Добавить генерацию GitHub Issue без автоматической отправки по умолчанию.

@@ -1,0 +1,6 @@
+{
+  "agent_id": "shadow-agent",
+  "model": "openai",
+  "environment": "production"
+}
+

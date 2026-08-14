@@ -92,4 +92,4 @@ CLI
 
 ## Статус
 
-Проект инициализирован. Рыночные материалы, roadmap, архитектура и security blueprint подключены. Первый P0-срез Go CLI реализован; backend, collectors и risk rules расширяются следующим этапом.
+Проект инициализирован. Рыночные материалы, roadmap, архитектура и security blueprint подключены. Первый P0-срез Go CLI, demo fixtures и правила `ACP-001`–`ACP-005` реализованы; следующий этап — расширение collectors и canonical data model.

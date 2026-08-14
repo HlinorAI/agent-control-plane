@@ -76,3 +76,27 @@ func TestRunIgnoresDocumentationFiles(t *testing.T) {
 		t.Fatalf("documentation should not be inventoried: %+v", report)
 	}
 }
+
+func TestRunDemoFixtureFindsFirstFiveRules(t *testing.T) {
+	report, err := Run(filepath.Join("..", "..", "testdata", "demo"), Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	wanted := map[string]bool{"ACP-001": false, "ACP-002": false, "ACP-003": false, "ACP-004": false, "ACP-005": false}
+	for _, finding := range report.Findings {
+		if _, ok := wanted[finding.RuleID]; ok {
+			wanted[finding.RuleID] = true
+		}
+	}
+	for ruleID, found := range wanted {
+		if !found {
+			t.Fatalf("demo fixture did not produce %s; findings=%+v", ruleID, report.Findings)
+		}
+	}
+	if len(report.Agents) != 2 {
+		t.Fatalf("expected two source agents, got %+v", report.Agents)
+	}
+	if len(report.Identities) != 1 || report.Identities[0].Name != "shared-crm-role" {
+		t.Fatalf("expected shared identity inventory, got %+v", report.Identities)
+	}
+}
