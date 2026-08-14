@@ -28,7 +28,22 @@ CLI
   → JSON/CSV report
 ```
 
-Предварительный стек: TypeScript, SQLite на этапе локального прототипа, YAML/JSON parsers. PostgreSQL и web-dashboard добавляются после подтверждения базового сценария.
+Целевая архитектура подробно описана в `Архитектура MVP Agent Control Plane.txt`, а схемы сохранены в `agent_control_plane_architecture.mmd` и `agent_control_plane_architecture.d2`.
+
+Архитектурные решения MVP:
+
+- Go для `agentctl`, self-hosted runner, parsers и API;
+- PostgreSQL для inventory, relationships, findings и scan history;
+- Redis Streams для асинхронных scan jobs на hosted/self-hosted backend;
+- S3-compatible storage для redacted evidence artifacts;
+- React + TypeScript для UI;
+- OpenTelemetry metadata-only по умолчанию;
+- Docker Compose для local pilot и Helm для Kubernetes;
+- relationships в PostgreSQL вместо graph database до появления доказанной потребности.
+
+Для P0 допускается локальный JSON output без backend. Это позволяет проверить scanner и evidence contract до запуска ingestion API и очереди.
+
+Целевой масштаб MVP: 10 design partners, 500–1 000 discovered agents, 25–50 workspaces и до 10 млн metadata/evidence events в месяц. Это target architecture, а не обязательный объём первого прототипа.
 
 ## Критерий первого успеха
 

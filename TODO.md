@@ -23,8 +23,9 @@
 
 ### Проект и CLI
 
-- [ ] Инициализировать TypeScript-проект с package manager и строгими настройками.
+- [ ] Инициализировать Go-модуль с командами и строгими настройками.
 - [ ] Создать команду `agentctl scan <path>`.
+- [ ] Добавить `agentctl init` для выбора workspace и approved sources.
 - [ ] Добавить параметры `--dry-run`, `--format json|text` и `--output`.
 - [ ] Возвращать ненулевой exit code при ошибке сканирования.
 - [ ] Не читать значения секретов и не отправлять данные наружу.
@@ -35,6 +36,8 @@
 - [ ] Определить стабильные ID и правила дедупликации сущностей.
 - [ ] Зафиксировать JSON-схему отчёта.
 - [ ] Добавить версию схемы отчёта.
+- [ ] Описать canonical relationships и типы evidence/confidence.
+- [ ] Добавить OpenAPI 3.1 contract для будущего ingestion/API слоя.
 
 ### Git collector
 
@@ -45,6 +48,13 @@
 - [ ] Определять repository path и environment, если они явно указаны.
 - [ ] Сохранять путь файла и номер строки как evidence.
 - [ ] Показывать в dry-run список прочитанных файлов.
+
+### Source collectors
+
+- [ ] Зафиксировать read-only contract для Git, Docker/Kubernetes, MCP и OTel metadata.
+- [ ] Описать schema versioning для collector batches.
+- [ ] Добавить idempotency key для повторного scan.
+- [ ] Поддержать metadata-only OTel без raw production payload по умолчанию.
 
 ### Отчёт
 
@@ -95,15 +105,28 @@
 
 ### Risk engine
 
-- [ ] Реализовать правило `missing_owner`.
-- [ ] Реализовать правило `shared_identity`.
-- [ ] Реализовать правило `excessive_permission`.
-- [ ] Реализовать правило `unknown_mcp_server`.
-- [ ] Реализовать правило `untracked_production_agent`.
-- [ ] Реализовать правило `cross_environment_leak`.
-- [ ] Реализовать правило `unapproved_provider`.
+- [ ] Реализовать `ACP-001`: production agent без owner/team.
+- [ ] Реализовать `ACP-002`: runtime agent отсутствует в source inventory.
+- [ ] Реализовать `ACP-003`: один identity используется unrelated agents.
+- [ ] Реализовать `ACP-004`: write/admin scope при read-only use case.
+- [ ] Реализовать `ACP-005`: MCP server отсутствует в approved registry.
+- [ ] Реализовать `ACP-006`: production credential в development.
+- [ ] Реализовать `ACP-007`: sensitive tool без approval metadata.
+- [ ] Реализовать `ACP-008`: provider/model нарушает workspace policy.
+- [ ] Реализовать `ACP-009`: отсутствует disable/rollback path.
+- [ ] Реализовать `ACP-010`: stale agent/identity.
+- [ ] Реализовать `ACP-011`: duplicate agents одной capability.
+- [ ] Реализовать `ACP-012`: schema change без owner acknowledgement.
 - [ ] Для каждого finding показывать доказательство и confidence score.
 - [ ] Добавить конфигурацию approved owners/providers/servers.
+
+### Backend foundation
+
+- [ ] Создать PostgreSQL schema для Workspace/Source/Agent/Identity/Tool/Relationship/Evidence/Finding/ScanRun.
+- [ ] Добавить транзакционный commit inventory snapshot.
+- [ ] Добавить Redis Streams job queue только после подтверждения async scan workload.
+- [ ] Добавить signed batch ingestion и tenant isolation.
+- [ ] Добавить S3-compatible evidence storage с redaction metadata.
 
 ### MCP и infrastructure collectors
 
@@ -112,6 +135,13 @@
 - [ ] Добавить Docker Compose collector.
 - [ ] Добавить Kubernetes Deployment/ServiceAccount collector.
 - [ ] Не извлекать содержимое secret values.
+
+### Remediation and lifecycle
+
+- [ ] Добавить finding lifecycle: open, remediating, accepted-risk, closed, reopened.
+- [ ] Добавить due date и accepted-risk expiry.
+- [ ] Создавать GitHub/Jira/Slack actions только с явным user trigger.
+- [ ] Проверять resolution на следующем scan.
 
 ### Fixtures и тесты
 
@@ -130,12 +160,15 @@
 
 ## P2 — после подтверждения MVP
 
-- [ ] SQLite-хранилище для истории сканирований.
+- [ ] Local SQLite adapter для offline history, если он нужен после P0.
 - [ ] Web-dashboard с inventory и фильтрами.
 - [ ] OpenTelemetry collector.
 - [ ] GitHub App вместо локального режима.
 - [ ] Jira/Slack integrations.
 - [ ] PostgreSQL для командной работы.
+- [ ] Self-hosted runner с outbound-only HTTPS.
+- [ ] Docker Compose local deployment и Helm chart.
+- [ ] OIDC authentication; SAML только при подтверждённом pilot demand.
 - [ ] Отслеживание remediation status между сканированиями.
 - [ ] Self-hosted deployment.
 
