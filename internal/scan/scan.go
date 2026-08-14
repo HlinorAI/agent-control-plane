@@ -23,20 +23,21 @@ const (
 )
 
 var (
-	modelPattern                = regexp.MustCompile(`(?i)(openai|anthropic|claude|gemini|vertexai|bedrock|ollama|litellm)`)
-	modelDeclaration            = regexp.MustCompile(`(?im)^\s*["']?(model|model[_ -]?provider|provider)["']?\s*[:=]`)
-	toolPattern                 = regexp.MustCompile(`(?i)(mcp|tool[_ -]?call|function[_ -]?call|tools\s*:)`)
+	modelPattern                = regexp.MustCompile(`(?i)\b(openai|anthropic|claude|gemini|vertexai|bedrock|ollama|litellm)\b\s*(?:[./:@_-]|\()`)
+	modelDeclaration            = regexp.MustCompile(`(?im)^\s*["']?(model|model[_ -]+provider|provider)["']?\s*[:=]`)
+	toolPattern                 = regexp.MustCompile(`(?im)^\s*["']?(mcp([_ -]+(server|tool))?|tools?|tool[_ -]+(call|name|definition)|function[_ -]+(call|name|definition))["']?\s*[:=]`)
 	frameworkPattern            = regexp.MustCompile(`(?i)(langgraph|langchain|crewai|autogen|pydantic[_ -]?ai)`)
 	ownerPattern                = regexp.MustCompile(`(?im)^\s*(owner|team|maintainer)\s*[:=]`)
 	namePattern                 = regexp.MustCompile(`(?im)^\s*["']?(agent[_ -]?(name|id)|name)["']?\s*[:=]`)
 	identityPattern             = regexp.MustCompile(`(?im)^\s*["']?(identity|service[_ -]?account|principal|role)["']?\s*[:=]`)
-	mcpPattern                  = regexp.MustCompile(`(?im)^\s*["']?(mcp[_ -]?server|server[_ -]?name)["']?\s*[:=]`)
+	mcpPattern                  = regexp.MustCompile(`(?im)^\s*["']?(mcp[_ -]+server|server[_ -]+name)["']?\s*[:=]`)
 	listItemPattern             = regexp.MustCompile(`^\s*-\s*["']?([A-Za-z0-9._:/-]+)`)
 	environmentPattern          = regexp.MustCompile(`(?im)^\s*["']?(environment|env)["']?\s*[:=]\s*["']?(production|prod|development|dev)["']?\s*$`)
 	productionComment           = regexp.MustCompile(`(?i)\bproduction\s+agent\b`)
 	runtimePattern              = regexp.MustCompile(`(?i)(^|/)(runtime|otel|traces?)(/|$)`)
 	readOnlyPattern             = regexp.MustCompile(`(?i)(read[_ -]?only|readonly)`)
 	writePattern                = regexp.MustCompile(`(?i)\b(delete|write|admin|update|create|send|execute)\b`)
+	permissionDeclaration       = regexp.MustCompile(`(?im)^\s*["']?(tool|tools|scope|scopes|permission|permissions|capability|capabilities|operation|operations|access)["']?\s*[:=]`)
 	secretPattern               = regexp.MustCompile(`(?i)(api[_-]?key|secret|token|private[_-]?key)\s*[:=]`)
 	productionCredentialPattern = regexp.MustCompile(`(?i)\b(production|prod)[_-]?(credential|token|key|secret)\b|\b(credential|token|key|secret)[_-]?(production|prod)\b`)
 	sensitiveToolPattern        = regexp.MustCompile(`(?im)^\s*["']?sensitive[_ -]?tool["']?\s*[:=]`)
@@ -388,6 +389,9 @@ func Run(root string, options Options) (Report, error) {
 }
 
 func inspectFile(path, relative string) (*candidate, error) {
+	if strings.HasSuffix(strings.ToLower(relative), "_test.go") {
+		return nil, nil
+	}
 	file, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -407,11 +411,13 @@ func inspectFile(path, relative string) (*candidate, error) {
 	productionCredential, sensitiveTool, approvalMetadata, disablePath := false, false, false, false
 	approvedServers, approvedProviders, mcpTools := []string{}, []string{}, []string{}
 	firstSignal := 0
+	scannerImplementation := false
 	for scanner.Scan() {
 		lineNumber++
 		line := scanner.Text()
 		if strings.Contains(line, "regexp.MustCompile") {
 			// Do not let the scanner's own detection vocabulary become inventory.
+			scannerImplementation = true
 			continue
 		}
 		if productionCredentialPattern.MatchString(line) {
@@ -435,7 +441,7 @@ func inspectFile(path, relative string) (*candidate, error) {
 				disableLine = lineNumber
 			}
 		}
-		if verifiedPattern.MatchString(line) && verifiedAt == "" {
+		if declarationMatch(line, verifiedPattern) && verifiedAt == "" {
 			verifiedAt = declarationValue(line, verifiedPattern)
 			verifiedLine = lineNumber
 		}
@@ -443,27 +449,27 @@ func inspectFile(path, relative string) (*candidate, error) {
 			// Never copy or emit the line. The scanner only retains safe metadata.
 			continue
 		}
-		if name == "" && namePattern.MatchString(line) {
+		if name == "" && declarationMatch(line, namePattern) {
 			name = declarationValue(line, namePattern)
 		}
-		if identity == "" && identityPattern.MatchString(line) {
+		if identity == "" && declarationMatch(line, identityPattern) {
 			identity = declarationValue(line, identityPattern)
 			identityLine = lineNumber
 		}
-		if mcpServer == "" && mcpPattern.MatchString(line) {
+		if mcpServer == "" && declarationMatch(line, mcpPattern) {
 			mcpServer = declarationValue(line, mcpPattern)
 			mcpLine = lineNumber
 		}
-		if mcpServer != "" && mcpTransport == "" && transportPattern.MatchString(line) {
+		if mcpServer != "" && mcpTransport == "" && declarationMatch(line, transportPattern) {
 			mcpTransport = declarationValue(line, transportPattern)
 		}
-		if mcpServer != "" && mcpAuthMethod == "" && authMethodPattern.MatchString(line) {
+		if mcpServer != "" && mcpAuthMethod == "" && declarationMatch(line, authMethodPattern) {
 			mcpAuthMethod = declarationValue(line, authMethodPattern)
 		}
 		if readOnlyPattern.MatchString(line) {
 			readOnly = true
 		}
-		if writePattern.MatchString(line) {
+		if writePattern.MatchString(line) && (declarationMatch(line, toolPattern) || declarationMatch(line, permissionDeclaration)) {
 			writeScope = true
 			permissionLine = lineNumber
 		}
@@ -477,13 +483,13 @@ func inspectFile(path, relative string) (*candidate, error) {
 				approvedProviders = appendUnique(approvedProviders, match[1])
 			}
 		}
-		if mcpServer != "" && toolPattern.MatchString(line) {
+		if mcpServer != "" && declarationMatch(line, toolPattern) {
 			mcpTools = appendUnique(mcpTools, toolLabel(line))
 		}
-		if firstSignal == 0 && (frameworkPattern.MatchString(line) || modelPattern.MatchString(line) || modelDeclaration.MatchString(line) || toolPattern.MatchString(line) || sensitiveTool) {
+		if firstSignal == 0 && (frameworkPattern.MatchString(line) || modelPattern.MatchString(line) || declarationMatch(line, modelDeclaration) || declarationMatch(line, toolPattern) || sensitiveTool) {
 			firstSignal = lineNumber
 		}
-		if modelDeclaration.MatchString(line) {
+		if declarationMatch(line, modelDeclaration) {
 			if value := declarationValue(line, modelDeclaration); value != "" && value != "unknown" {
 				models = appendUnique(models, value)
 				if modelLine == 0 {
@@ -496,13 +502,13 @@ func inspectFile(path, relative string) (*candidate, error) {
 				modelLine = lineNumber
 			}
 		}
-		if toolPattern.MatchString(line) {
+		if declarationMatch(line, toolPattern) {
 			tools = appendUnique(tools, toolLabel(line))
 		}
-		if owner == "" {
+		if owner == "" && declarationMatch(line, ownerPattern) {
 			owner = declarationValue(line, ownerPattern)
 		}
-		if environment == "" && environmentPattern.MatchString(line) {
+		if environment == "" && declarationMatch(line, environmentPattern) {
 			environmentExplicit = true
 			value := strings.ToLower(declarationValue(line, environmentPattern))
 			switch value {
@@ -520,6 +526,9 @@ func inspectFile(path, relative string) (*candidate, error) {
 	}
 	if err := scanner.Err(); err != nil {
 		return nil, err
+	}
+	if scannerImplementation {
+		return nil, nil
 	}
 	if firstSignal == 0 && identity == "" && mcpServer == "" && len(approvedServers) == 0 && len(approvedProviders) == 0 && !runtimePattern.MatchString(relative) {
 		return nil, nil
@@ -579,7 +588,7 @@ func excludedDirectory(name string, exclusions []string) bool {
 }
 
 func declarationValue(line string, pattern *regexp.Regexp) string {
-	if !pattern.MatchString(line) {
+	if !declarationMatch(line, pattern) {
 		return ""
 	}
 	parts := strings.SplitN(line, ":", 2)
@@ -594,6 +603,10 @@ func declarationValue(line string, pattern *regexp.Regexp) string {
 		return "unknown"
 	}
 	return value
+}
+
+func declarationMatch(line string, pattern *regexp.Regexp) bool {
+	return pattern.MatchString(line) && !strings.Contains(strings.TrimSpace(line), ":=")
 }
 
 func modelLabel(line string) string {

@@ -92,4 +92,4 @@ CLI
 
 ## Статус
 
-Проект инициализирован. Рыночные материалы, roadmap, архитектура и security blueprint подключены. Первый P0-срез Go CLI, demo fixtures и правила `ACP-001`–`ACP-005` реализованы. M1-срез расширил canonical data model сущностями Source/Model и provenance-связями, добавил metadata-only Git/MCP heuristic collection и правила `ACP-006`–`ACP-010`. Policy-backed `agentctl init` реализован; следующий этап — прогон на 1–3 реальных репозиториях, затем реальные Git/Docker/Kubernetes source adapters.
+Проект инициализирован. Рыночные материалы, roadmap, архитектура и security blueprint подключены. Первый P0-срез Go CLI, demo fixtures и правила `ACP-001`–`ACP-005` реализованы. M1-срез расширил canonical data model сущностями Source/Model и provenance-связями, добавил metadata-only Git/MCP heuristic collection и правила `ACP-006`–`ACP-010`. Policy-backed `agentctl init` реализован, self-detection false positives закрыты regression-тестами; следующий этап — прогон на 1–3 реальных репозиториях, затем реальные Git/Docker/Kubernetes source adapters.

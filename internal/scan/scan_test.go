@@ -79,6 +79,49 @@ func TestRunIgnoresDocumentationFiles(t *testing.T) {
 	}
 }
 
+func TestRunIgnoresScannerImplementationVocabulary(t *testing.T) {
+	root := t.TempDir()
+	file := filepath.Join(root, "scanner.go")
+	content := `package scan
+
+var modelProvider = "openai"
+var writeScope = true
+var mcpServer = "internal"
+var message = "production agent uses tools"
+`
+	if err := os.WriteFile(file, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	report, err := Run(root, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(report.Agents) != 0 || len(report.Findings) != 0 {
+		t.Fatalf("implementation vocabulary was inventoried as an agent: %+v", report)
+	}
+}
+
+func TestRunIgnoresScannerImplementationFile(t *testing.T) {
+	root := t.TempDir()
+	file := filepath.Join(root, "scanner.go")
+	content := `package scan
+
+var providerPattern = regexp.MustCompile("openai")
+model = "openai"
+MCP_TOOL = "internal"
+`
+	if err := os.WriteFile(file, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	report, err := Run(root, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(report.Agents) != 0 || len(report.Findings) != 0 {
+		t.Fatalf("scanner implementation file was inventoried: %+v", report)
+	}
+}
+
 func TestRunDemoFixtureFindsRiskRulesAndCanonicalRelationships(t *testing.T) {
 	report, err := Run(filepath.Join("..", "..", "testdata", "demo"), Options{})
 	if err != nil {
