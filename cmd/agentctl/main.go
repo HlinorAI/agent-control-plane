@@ -9,7 +9,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/hlinor-systems/agent-control-plane/internal/scan"
+	"github.com/HlinorAI/agent-control-plane/internal/scan"
 )
 
 func main() {

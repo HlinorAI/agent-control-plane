@@ -1,4 +1,3 @@
-module github.com/hlinor-systems/agent-control-plane
+module github.com/HlinorAI/agent-control-plane
 
 go 1.26
-

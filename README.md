@@ -11,7 +11,7 @@ go run ./cmd/agentctl scan . --dry-run
 go run ./cmd/agentctl scan . --format json
 ```
 
-The scanner currently detects likely agent/model/tool references and reports `ACP-001` owner-gap findings. It is intentionally heuristic and does not claim production status without source evidence.
+The scanner detects likely agent/model/tool references, canonical relationships and explainable `ACP-001`–`ACP-010` findings. It is intentionally heuristic and does not claim production status without source evidence. The current MCP collector reads server names, approval registry entries and safe transport/auth/tool metadata without reading secret values.
 
 ## Security boundary
 
@@ -23,4 +23,3 @@ The scanner currently detects likely agent/model/tool references and reports `AC
 - no network calls in the local P0 path.
 
 See [PROJECT_PLAN.md](PROJECT_PLAN.md), [TODO.md](TODO.md), [Архитектура MVP Agent Control Plane.txt](Архитектура%20MVP%20Agent%20Control%20Plane.txt) and [Security & Compliance Blueprint для Agent Control Plane.md](Security%20%26%20Compliance%20Blueprint%20для%20Agent%20Control%20Plane.md).
-

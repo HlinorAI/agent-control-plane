@@ -37,7 +37,7 @@
 - [x] Определить стабильные ID и базовые правила дедупликации сущностей.
 - [x] Зафиксировать JSON-схему отчёта первого CLI-среза.
 - [x] Добавить версию схемы отчёта.
-- [ ] Описать canonical relationships и типы evidence/confidence.
+- [x] Описать canonical relationships и типы evidence/confidence.
 - [ ] Добавить OpenAPI 3.1 contract для будущего ingestion/API слоя.
 
 ### Git collector
@@ -125,11 +125,11 @@
 - [x] Реализовать `ACP-003`: один identity используется unrelated agents.
 - [x] Реализовать `ACP-004`: write/admin scope при read-only use case.
 - [x] Реализовать `ACP-005`: MCP server отсутствует в approved registry.
-- [ ] Реализовать `ACP-006`: production credential в development.
-- [ ] Реализовать `ACP-007`: sensitive tool без approval metadata.
-- [ ] Реализовать `ACP-008`: provider/model нарушает workspace policy.
-- [ ] Реализовать `ACP-009`: отсутствует disable/rollback path.
-- [ ] Реализовать `ACP-010`: stale agent/identity.
+- [x] Реализовать `ACP-006`: production credential в development.
+- [x] Реализовать `ACP-007`: sensitive tool без approval metadata.
+- [x] Реализовать `ACP-008`: provider/model нарушает workspace policy.
+- [x] Реализовать `ACP-009`: отсутствует disable/rollback path.
+- [x] Реализовать `ACP-010`: stale agent/identity.
 - [ ] Реализовать `ACP-011`: duplicate agents одной capability.
 - [ ] Реализовать `ACP-012`: schema change без owner acknowledgement.
 - [ ] Для каждого finding показывать доказательство и confidence score.
@@ -165,9 +165,9 @@
 
 - [x] Создать demo repository с намеренными рисками для `ACP-001`–`ACP-005`.
 - [x] Добавить unit-тесты для parser’ов.
-- [ ] Добавить fixture-тесты для каждого risk rule.
+- [x] Добавить fixture-тесты для каждого risk rule.
 - [x] Добавить smoke-тест полного `agentctl scan`.
-- [ ] Проверить повторный запуск: одинаковые входы дают стабильный отчёт.
+- [x] Проверить повторный запуск: одинаковые входы дают стабильный отчёт.
 - [ ] Добавить fuzz/property tests для YAML/JSON/MCP parsers.
 - [ ] Добавить integration tests с PostgreSQL и connector failure paths.
 

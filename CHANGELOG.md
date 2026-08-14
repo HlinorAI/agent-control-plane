@@ -15,3 +15,13 @@
 - Подключён Security & Compliance Blueprint: read-only, no arbitrary code execution, redaction, provenance, audit и tenant-isolation gates.
 - Реализован первый P0 Go CLI-срез `agentctl scan` с JSON/text output, dry-run, evidence и `ACP-001` owner-gap finding.
 - Добавлены demo fixtures и первые пять explainable risk rules: `ACP-001`–`ACP-005`.
+
+## 2026-08-15
+
+### Added
+
+- Расширена canonical report model сущностями `Source` и `Model`, provenance-полями и отношениями `DISCOVERED_FROM`, `USES_MODEL`, `AUTHENTICATES_AS`, `CONNECTS_TO`.
+- Добавлен безопасный metadata-only сбор transport/auth/tool metadata для MCP и approved provider policy.
+- Реализованы explainable risk rules `ACP-006`–`ACP-010`: production credential в development, sensitive tool без approval, provider policy violation, отсутствие disable/rollback path и stale verification.
+- Расширены demo fixtures и тесты всех десяти правил, canonical relationships, secret boundary и стабильности отчёта.
+- Синхронизирован Go module path с приватным репозиторием `github.com/HlinorAI/agent-control-plane`.

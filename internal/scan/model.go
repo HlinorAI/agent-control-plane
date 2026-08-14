@@ -13,17 +13,20 @@ type Options struct {
 }
 
 type Report struct {
-	SchemaVersion string      `json:"schema_version"`
-	Root          string      `json:"root"`
-	ReadOnly      bool        `json:"read_only"`
-	MetadataOnly  bool        `json:"metadata_only"`
-	FilesScanned  int         `json:"files_scanned"`
-	FilesSkipped  int         `json:"files_skipped"`
-	Agents        []Agent     `json:"agents"`
-	Identities    []Identity  `json:"identities,omitempty"`
-	MCPServers    []MCPServer `json:"mcp_servers,omitempty"`
-	Findings      []Finding   `json:"findings"`
-	ReadFiles     []string    `json:"read_files,omitempty"`
+	SchemaVersion string         `json:"schema_version"`
+	Root          string         `json:"root"`
+	ReadOnly      bool           `json:"read_only"`
+	MetadataOnly  bool           `json:"metadata_only"`
+	FilesScanned  int            `json:"files_scanned"`
+	FilesSkipped  int            `json:"files_skipped"`
+	Sources       []Source       `json:"sources,omitempty"`
+	Agents        []Agent        `json:"agents"`
+	Models        []Model        `json:"models,omitempty"`
+	Identities    []Identity     `json:"identities,omitempty"`
+	MCPServers    []MCPServer    `json:"mcp_servers,omitempty"`
+	Relationships []Relationship `json:"relationships,omitempty"`
+	Findings      []Finding      `json:"findings"`
+	ReadFiles     []string       `json:"read_files,omitempty"`
 }
 
 type Agent struct {
@@ -39,6 +42,20 @@ type Agent struct {
 	Confidence  float64  `json:"confidence"`
 }
 
+type Model struct {
+	ID         string `json:"id"`
+	Provider   string `json:"provider"`
+	Name       string `json:"name"`
+	SourcePath string `json:"source_path"`
+}
+
+type Source struct {
+	ID         string `json:"id"`
+	Type       string `json:"type"`
+	Path       string `json:"path"`
+	TrustLevel string `json:"trust_level"`
+}
+
 type Identity struct {
 	ID         string `json:"id"`
 	Name       string `json:"name"`
@@ -46,10 +63,24 @@ type Identity struct {
 }
 
 type MCPServer struct {
-	ID         string `json:"id"`
-	Name       string `json:"name"`
-	Approved   bool   `json:"approved"`
-	SourcePath string `json:"source_path"`
+	ID         string   `json:"id"`
+	Name       string   `json:"name"`
+	Approved   bool     `json:"approved"`
+	Transport  string   `json:"transport,omitempty"`
+	AuthMethod string   `json:"auth_method,omitempty"`
+	Tools      []string `json:"tools,omitempty"`
+	SourcePath string   `json:"source_path"`
+}
+
+type Relationship struct {
+	ID         string   `json:"id"`
+	FromType   string   `json:"from_type"`
+	FromID     string   `json:"from_id"`
+	EdgeType   string   `json:"edge_type"`
+	ToType     string   `json:"to_type"`
+	ToID       string   `json:"to_id"`
+	Evidence   Evidence `json:"evidence"`
+	Confidence float64  `json:"confidence"`
 }
 
 type Finding struct {
@@ -70,7 +101,13 @@ type Evidence struct {
 
 func (r Report) Text() string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "Agent Control Plane scan\nRoot: %s\nRead-only: %t\nMetadata-only: %t\nFiles: %d scanned, %d skipped\nAgents: %d\nIdentities: %d\nMCP servers: %d\nFindings: %d\n", r.Root, r.ReadOnly, r.MetadataOnly, r.FilesScanned, r.FilesSkipped, len(r.Agents), len(r.Identities), len(r.MCPServers), len(r.Findings))
+	toolSet := map[string]bool{}
+	for _, agent := range r.Agents {
+		for _, tool := range agent.Tools {
+			toolSet[tool] = true
+		}
+	}
+	fmt.Fprintf(&b, "Agent Control Plane scan\nRoot: %s\nRead-only: %t\nMetadata-only: %t\nFiles: %d scanned, %d skipped\nSources: %d\nAgents: %d\nModels: %d\nTools: %d\nIdentities: %d\nMCP servers: %d\nRelationships: %d\nFindings: %d\n", r.Root, r.ReadOnly, r.MetadataOnly, r.FilesScanned, r.FilesSkipped, len(r.Sources), len(r.Agents), len(r.Models), len(toolSet), len(r.Identities), len(r.MCPServers), len(r.Relationships), len(r.Findings))
 	if len(r.ReadFiles) > 0 {
 		b.WriteString("\nRead files:\n")
 		for _, path := range r.ReadFiles {
@@ -104,6 +141,9 @@ func (r Report) Text() string {
 
 func sortReport(r *Report) {
 	sort.Slice(r.Agents, func(i, j int) bool { return r.Agents[i].ID < r.Agents[j].ID })
+	sort.Slice(r.Models, func(i, j int) bool { return r.Models[i].ID < r.Models[j].ID })
+	sort.Slice(r.Sources, func(i, j int) bool { return r.Sources[i].ID < r.Sources[j].ID })
+	sort.Slice(r.Relationships, func(i, j int) bool { return r.Relationships[i].ID < r.Relationships[j].ID })
 	sort.Slice(r.Findings, func(i, j int) bool { return r.Findings[i].ID < r.Findings[j].ID })
 	sort.Strings(r.ReadFiles)
 }

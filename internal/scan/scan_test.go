@@ -77,12 +77,15 @@ func TestRunIgnoresDocumentationFiles(t *testing.T) {
 	}
 }
 
-func TestRunDemoFixtureFindsFirstFiveRules(t *testing.T) {
+func TestRunDemoFixtureFindsRiskRulesAndCanonicalRelationships(t *testing.T) {
 	report, err := Run(filepath.Join("..", "..", "testdata", "demo"), Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	wanted := map[string]bool{"ACP-001": false, "ACP-002": false, "ACP-003": false, "ACP-004": false, "ACP-005": false}
+	wanted := map[string]bool{
+		"ACP-001": false, "ACP-002": false, "ACP-003": false, "ACP-004": false, "ACP-005": false,
+		"ACP-006": false, "ACP-007": false, "ACP-008": false, "ACP-009": false, "ACP-010": false,
+	}
 	for _, finding := range report.Findings {
 		if _, ok := wanted[finding.RuleID]; ok {
 			wanted[finding.RuleID] = true
@@ -93,10 +96,49 @@ func TestRunDemoFixtureFindsFirstFiveRules(t *testing.T) {
 			t.Fatalf("demo fixture did not produce %s; findings=%+v", ruleID, report.Findings)
 		}
 	}
-	if len(report.Agents) != 2 {
-		t.Fatalf("expected two source agents, got %+v", report.Agents)
+	if len(report.Agents) != 3 || len(report.Sources) != 6 || len(report.Models) != 3 {
+		t.Fatalf("unexpected canonical inventory sizes: agents=%d sources=%d models=%d", len(report.Agents), len(report.Sources), len(report.Models))
 	}
-	if len(report.Identities) != 1 || report.Identities[0].Name != "shared-crm-role" {
+	if len(report.Identities) != 2 || report.Identities[0].Name != "shared-crm-role" && report.Identities[1].Name != "shared-crm-role" {
 		t.Fatalf("expected shared identity inventory, got %+v", report.Identities)
+	}
+	edges := map[string]bool{}
+	for _, relationship := range report.Relationships {
+		edges[relationship.EdgeType] = true
+	}
+	for _, edge := range []string{"DISCOVERED_FROM", "USES_MODEL", "AUTHENTICATES_AS", "CONNECTS_TO"} {
+		if !edges[edge] {
+			t.Fatalf("missing canonical relationship %s: %+v", edge, report.Relationships)
+		}
+	}
+	encoded, err := json.Marshal(report)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(encoded), "prod-api-token") {
+		t.Fatalf("report leaked production credential material: %s", encoded)
+	}
+}
+
+func TestRunProducesStableReport(t *testing.T) {
+	root := filepath.Join("..", "..", "testdata", "demo")
+	first, err := Run(root, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := Run(root, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstJSON, err := json.Marshal(first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondJSON, err := json.Marshal(second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(firstJSON) != string(secondJSON) {
+		t.Fatalf("same inputs produced different reports\nfirst: %s\nsecond: %s", firstJSON, secondJSON)
 	}
 }
