@@ -93,7 +93,7 @@ SARIF is available now. Use `--fail-on high` or `--fail-on critical` to make fin
   with:
     go-version-file: go.mod
 - run: go run ./cmd/agentctl scan . --format sarif --fail-on high --output agentctl.sarif
-- uses: github/codeql-action/upload-sarif@v3
+- uses: github/codeql-action/upload-sarif@v4
   with:
     sarif_file: agentctl.sarif
 ```

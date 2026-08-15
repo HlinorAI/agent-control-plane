@@ -15,7 +15,7 @@ type sarifLog struct {
 
 type sarifRun struct {
 	Tool    sarifTool     `json:"tool"`
-	Results []sarifResult `json:"results,omitempty"`
+	Results []sarifResult `json:"results"`
 }
 
 type sarifTool struct {

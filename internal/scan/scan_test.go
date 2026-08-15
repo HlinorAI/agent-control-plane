@@ -253,6 +253,16 @@ func TestRunCollectsMCPJSONMetadata(t *testing.T) {
 	}
 }
 
+func TestSARIFIncludesEmptyResultsArray(t *testing.T) {
+	payload, err := (Report{Findings: []Finding{}}).SARIF()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(payload), `"results": []`) {
+		t.Fatalf("SARIF omitted the empty results array: %s", payload)
+	}
+}
+
 func TestRunDemoFixtureFindsRiskRulesAndCanonicalRelationships(t *testing.T) {
 	report, err := Run(filepath.Join("..", "..", "testdata", "demo"), Options{})
 	if err != nil {
