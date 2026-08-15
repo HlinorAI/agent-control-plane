@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: read
+  security-events: write
 
 jobs:
   test:
@@ -33,3 +34,12 @@ jobs:
 
       - name: Build CLI
         run: go build ./cmd/agentctl
+
+      - name: Scan repository
+        run: go run ./cmd/agentctl scan . --format sarif --fail-on high --output agentctl.sarif
+
+      - name: Upload SARIF results
+        if: ${{ always() && hashFiles('agentctl.sarif') != '' }}
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: agentctl.sarif

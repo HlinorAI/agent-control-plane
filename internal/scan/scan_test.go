@@ -202,6 +202,19 @@ func TestRunDetectsDeclarativeAgentRegistryEntry(t *testing.T) {
 	}
 }
 
+func TestRunRegressionFixtures(t *testing.T) {
+	report, err := Run(filepath.Join("..", "..", "testdata", "regression"), Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(report.Agents) != 1 || report.Agents[0].Name != "Ticket Triage Agent" {
+		t.Fatalf("unexpected regression inventory: %+v", report.Agents)
+	}
+	if len(report.Findings) != 0 {
+		t.Fatalf("regression fixtures produced unexpected findings: %+v", report.Findings)
+	}
+}
+
 func TestRunCollectsMCPJSONMetadata(t *testing.T) {
 	root := t.TempDir()
 	clientConfig := `{"mcpServers":{"docs":{"type":"http","url":"https://example.test/mcp"}}}`

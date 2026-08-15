@@ -33,6 +33,30 @@ func TestRunVersion(t *testing.T) {
 	}
 }
 
+func TestRunSARIFOutput(t *testing.T) {
+	var output bytes.Buffer
+	var errors bytes.Buffer
+	if err := run([]string{"scan", "../../testdata/demo", "--format", "sarif"}, &output, &errors); err != nil {
+		t.Fatal(err)
+	}
+	for _, expected := range []string{"\"version\": \"2.1.0\"", "\"ruleId\": \"ACP-006\"", "\"startLine\": 5"} {
+		if !strings.Contains(output.String(), expected) {
+			t.Fatalf("SARIF output missing %q: %s", expected, output.String())
+		}
+	}
+}
+
+func TestRunFailOnSeverity(t *testing.T) {
+	var output bytes.Buffer
+	var errors bytes.Buffer
+	if err := run([]string{"scan", "../../testdata/demo", "--format", "json", "--fail-on", "critical"}, &output, &errors); err == nil || !strings.Contains(err.Error(), "critical severity") {
+		t.Fatalf("expected critical threshold failure, got %v", err)
+	}
+	if !strings.Contains(output.String(), `"findings"`) {
+		t.Fatalf("expected report output before threshold failure: %s", output.String())
+	}
+}
+
 func TestRunInitCreatesConfigWithoutOverwriting(t *testing.T) {
 	root := t.TempDir()
 	var output bytes.Buffer

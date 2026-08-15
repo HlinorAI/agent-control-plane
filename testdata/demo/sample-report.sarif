@@ -1,0 +1,449 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "Agent Control Plane",
+          "version": "0.1",
+          "informationUri": "https://github.com/HlinorAI/agent-control-plane",
+          "rules": [
+            {
+              "id": "ACP-001",
+              "name": "ACP-001",
+              "shortDescription": {
+                "text": "Potential owner gap: no owner/team declaration found in the scanned source"
+              }
+            },
+            {
+              "id": "ACP-002",
+              "name": "ACP-002",
+              "shortDescription": {
+                "text": "Runtime agent has no matching source inventory entry"
+              }
+            },
+            {
+              "id": "ACP-003",
+              "name": "ACP-003",
+              "shortDescription": {
+                "text": "Identity \"shared-crm-role\" is shared by unrelated agent sources"
+              }
+            },
+            {
+              "id": "ACP-004",
+              "name": "ACP-004",
+              "shortDescription": {
+                "text": "Read-only use case references a write/admin capability"
+              }
+            },
+            {
+              "id": "ACP-005",
+              "name": "ACP-005",
+              "shortDescription": {
+                "text": "MCP server is not present in the approved registry"
+              }
+            },
+            {
+              "id": "ACP-006",
+              "name": "ACP-006",
+              "shortDescription": {
+                "text": "Development agent references a production credential"
+              }
+            },
+            {
+              "id": "ACP-007",
+              "name": "ACP-007",
+              "shortDescription": {
+                "text": "Sensitive tool is declared without approval metadata"
+              }
+            },
+            {
+              "id": "ACP-008",
+              "name": "ACP-008",
+              "shortDescription": {
+                "text": "Model provider \"unknown-provider\" is not present in the workspace policy"
+              }
+            },
+            {
+              "id": "ACP-009",
+              "name": "ACP-009",
+              "shortDescription": {
+                "text": "Production agent has no documented disable or rollback path"
+              }
+            },
+            {
+              "id": "ACP-010",
+              "name": "ACP-010",
+              "shortDescription": {
+                "text": "Agent verification metadata is stale"
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "ACP-007",
+          "level": "error",
+          "message": {
+            "text": "Sensitive tool is declared without approval metadata"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "agents/dev_agent.py"
+                },
+                "region": {
+                  "startLine": 6
+                }
+              }
+            }
+          ],
+          "properties": {
+            "agent_id": "agent_e71d63d2acc2b959",
+            "confidence": 0.82,
+            "remediation_hint": "Record an approval, exception, or change ticket before enabling the sensitive tool."
+          }
+        },
+        {
+          "ruleId": "ACP-009",
+          "level": "error",
+          "message": {
+            "text": "Production agent has no documented disable or rollback path"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "agents/crm_agent.py"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ],
+          "properties": {
+            "agent_id": "agent_57603bf821776970",
+            "confidence": 0.68,
+            "remediation_hint": "Document and test a safe disable, rollback, or kill-switch procedure for the production agent."
+          }
+        },
+        {
+          "ruleId": "ACP-001",
+          "level": "warning",
+          "message": {
+            "text": "Potential owner gap: no owner/team declaration found in the scanned source"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "agents/dev_agent.py"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ],
+          "properties": {
+            "agent_id": "agent_e71d63d2acc2b959",
+            "confidence": 0.55,
+            "remediation_hint": "Confirm an accountable owner or team and record the ownership source."
+          }
+        },
+        {
+          "ruleId": "ACP-008",
+          "level": "error",
+          "message": {
+            "text": "Model provider \"unknown-provider\" is not present in the workspace policy"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "agents/dev_agent.py"
+                },
+                "region": {
+                  "startLine": 2
+                }
+              }
+            }
+          ],
+          "properties": {
+            "agent_id": "agent_e71d63d2acc2b959",
+            "confidence": 0.86,
+            "remediation_hint": "Use an approved provider or update the workspace policy through an explicit review."
+          }
+        },
+        {
+          "ruleId": "ACP-005",
+          "level": "error",
+          "message": {
+            "text": "MCP server is not present in the approved registry"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "agents/billing_agent.py"
+                },
+                "region": {
+                  "startLine": 5
+                }
+              }
+            }
+          ],
+          "properties": {
+            "agent_id": "agent_d4c7feb8ccf186dd",
+            "confidence": 0.85,
+            "remediation_hint": "Review the server provenance and add it to the approved registry only after ownership and permission review."
+          }
+        },
+        {
+          "ruleId": "ACP-009",
+          "level": "error",
+          "message": {
+            "text": "Production agent has no documented disable or rollback path"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "agents/billing_agent.py"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ],
+          "properties": {
+            "agent_id": "agent_d4c7feb8ccf186dd",
+            "confidence": 0.68,
+            "remediation_hint": "Document and test a safe disable, rollback, or kill-switch procedure for the production agent."
+          }
+        },
+        {
+          "ruleId": "ACP-010",
+          "level": "warning",
+          "message": {
+            "text": "Agent verification metadata is stale"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "agents/dev_agent.py"
+                },
+                "region": {
+                  "startLine": 7
+                }
+              }
+            }
+          ],
+          "properties": {
+            "agent_id": "agent_e71d63d2acc2b959",
+            "confidence": 0.88,
+            "remediation_hint": "Re-verify the agent, identity, permissions, and owner, then update the verification date."
+          }
+        },
+        {
+          "ruleId": "ACP-003",
+          "level": "error",
+          "message": {
+            "text": "Identity \"shared-crm-role\" is shared by unrelated agent sources"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "agents/crm_agent.py"
+                },
+                "region": {
+                  "startLine": 4
+                }
+              }
+            }
+          ],
+          "properties": {
+            "agent_id": "agent_57603bf821776970",
+            "confidence": 0.7,
+            "remediation_hint": "Use a dedicated least-privilege identity or document an approved shared-identity exception."
+          }
+        },
+        {
+          "ruleId": "ACP-002",
+          "level": "error",
+          "message": {
+            "text": "Runtime agent has no matching source inventory entry"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "runtime/agents.json"
+                },
+                "region": {
+                  "startLine": 2
+                }
+              }
+            }
+          ],
+          "properties": {
+            "agent_id": "runtime-agent_729109f2b322ef45",
+            "confidence": 0.75,
+            "remediation_hint": "Confirm the source repository and owner, or register this runtime agent explicitly."
+          }
+        },
+        {
+          "ruleId": "ACP-003",
+          "level": "error",
+          "message": {
+            "text": "Identity \"shared-crm-role\" is shared by unrelated agent sources"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "agents/billing_agent.py"
+                },
+                "region": {
+                  "startLine": 4
+                }
+              }
+            }
+          ],
+          "properties": {
+            "agent_id": "agent_d4c7feb8ccf186dd",
+            "confidence": 0.7,
+            "remediation_hint": "Use a dedicated least-privilege identity or document an approved shared-identity exception."
+          }
+        },
+        {
+          "ruleId": "ACP-004",
+          "level": "error",
+          "message": {
+            "text": "Read-only use case references a write/admin capability"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "agents/crm_agent.py"
+                },
+                "region": {
+                  "startLine": 7
+                }
+              }
+            }
+          ],
+          "properties": {
+            "agent_id": "agent_57603bf821776970",
+            "confidence": 0.8,
+            "remediation_hint": "Remove the write scope or document an explicit approved exception."
+          }
+        },
+        {
+          "ruleId": "ACP-006",
+          "level": "error",
+          "message": {
+            "text": "Development agent references a production credential"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "agents/dev_agent.py"
+                },
+                "region": {
+                  "startLine": 5
+                }
+              }
+            }
+          ],
+          "properties": {
+            "agent_id": "agent_e71d63d2acc2b959",
+            "confidence": 0.9,
+            "remediation_hint": "Use a development-scoped credential and verify that production credentials are unavailable in the development environment."
+          }
+        },
+        {
+          "ruleId": "ACP-001",
+          "level": "error",
+          "message": {
+            "text": "Potential owner gap: no owner/team declaration found in the scanned source"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "agents/crm_agent.py"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ],
+          "properties": {
+            "agent_id": "agent_57603bf821776970",
+            "confidence": 0.55,
+            "remediation_hint": "Confirm an accountable owner or team and record the ownership source."
+          }
+        },
+        {
+          "ruleId": "ACP-005",
+          "level": "error",
+          "message": {
+            "text": "MCP server is not present in the approved registry"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "agents/crm_agent.py"
+                },
+                "region": {
+                  "startLine": 6
+                }
+              }
+            }
+          ],
+          "properties": {
+            "agent_id": "agent_57603bf821776970",
+            "confidence": 0.85,
+            "remediation_hint": "Review the server provenance and add it to the approved registry only after ownership and permission review."
+          }
+        },
+        {
+          "ruleId": "ACP-001",
+          "level": "error",
+          "message": {
+            "text": "Potential owner gap: no owner/team declaration found in the scanned source"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "agents/billing_agent.py"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ],
+          "properties": {
+            "agent_id": "agent_d4c7feb8ccf186dd",
+            "confidence": 0.55,
+            "remediation_hint": "Confirm an accountable owner or team and record the ownership source."
+          }
+        }
+      ]
+    }
+  ]
+}

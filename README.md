@@ -13,6 +13,7 @@ go run ./cmd/agentctl version
 go run ./cmd/agentctl init ./workspace
 go run ./cmd/agentctl scan ./workspace --format text
 go run ./cmd/agentctl scan ./workspace --format json --output report.json
+go run ./cmd/agentctl scan ./workspace --format sarif --fail-on high --output agentctl.sarif
 ```
 
 Install from the public module after the repository is released:
@@ -30,6 +31,7 @@ go run ./cmd/agentctl scan ./testdata/demo
 ```
 
 The fixture intentionally produces three agents, one MCP server and findings across `ACP-001` through `ACP-010`.
+The committed [sample SARIF report](testdata/demo/sample-report.sarif) shows the format without exposing secret values.
 
 ## What it does
 
@@ -41,6 +43,7 @@ The CLI scans an approved local directory in read-only mode and produces text or
 - identities, environments and ownership declarations;
 - canonical relationships with source evidence;
 - deterministic risk findings with file/line evidence;
+- SARIF 2.1.0 output for GitHub Code Scanning and other security tooling;
 - safe `.mcp.json` and `server.json` metadata such as server name, transport and auth method.
 
 The default policy excludes common non-production paths such as tests, examples, samples, tutorials, fixtures, documentation, schemas and framework library layouts. Use `.agentctl/config.yaml` to add workspace-specific exclusions and approved providers or MCP servers. `agentctl init` never overwrites an existing policy.
@@ -78,7 +81,22 @@ The alpha includes ten explainable rules:
 - Detection is heuristic and should be reviewed by a human.
 - The alpha scans local repositories and configuration files; GitHub, GitLab, Docker and Kubernetes connectors are not implemented yet.
 - No runtime proxy, IAM remediation, hosted control plane, dashboard or compliance certification is included.
-- JSON is the stable report format for the current slice; CSV, SARIF and issue export are planned.
+- JSON and SARIF are the stable report formats for the current slice; CSV and issue export are planned.
+
+SARIF is available now. Use `--fail-on high` or `--fail-on critical` to make findings a CI gate; the default `none` keeps scans informational.
+
+### GitHub Actions example
+
+```yaml
+- uses: actions/checkout@v4
+- uses: actions/setup-go@v5
+  with:
+    go-version-file: go.mod
+- run: go run ./cmd/agentctl scan . --format sarif --fail-on high --output agentctl.sarif
+- uses: github/codeql-action/upload-sarif@v3
+  with:
+    sarif_file: agentctl.sarif
+```
 
 ## Development
 

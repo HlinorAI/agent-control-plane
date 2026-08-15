@@ -25,7 +25,7 @@ func main() {
 
 func run(args []string, stdout, stderr io.Writer) error {
 	if len(args) == 0 {
-		return errors.New("usage: agentctl version | agentctl init <path> | agentctl scan <path> [--config file] [--dry-run] [--format text|json] [--output file]")
+		return errors.New("usage: agentctl version | agentctl init <path> | agentctl scan <path> [--config file] [--dry-run] [--format text|json|sarif] [--fail-on none|low|medium|high|critical] [--output file]")
 	}
 	if args[0] == "version" || args[0] == "--version" || args[0] == "-v" {
 		if len(args) != 1 {
@@ -47,14 +47,18 @@ func run(args []string, stdout, stderr io.Writer) error {
 	fs := flag.NewFlagSet("scan", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	dryRun := fs.Bool("dry-run", false, "list approved files without parsing content")
-	format := fs.String("format", "text", "output format: text or json")
+	format := fs.String("format", "text", "output format: text, json or sarif")
+	failOn := fs.String("fail-on", "none", "return a non-zero exit code at this severity or higher")
 	output := fs.String("output", "", "write the report to a file instead of stdout")
 	configFile := fs.String("config", "", "workspace policy file; defaults to <path>/.agentctl/config.yaml when present")
 	if err := fs.Parse(args[2:]); err != nil {
 		return err
 	}
-	if *format != "text" && *format != "json" {
+	if *format != "text" && *format != "json" && *format != "sarif" {
 		return fmt.Errorf("unsupported format %q", *format)
+	}
+	if !validSeverity(*failOn) {
+		return fmt.Errorf("unsupported fail-on severity %q", *failOn)
 	}
 
 	root := args[1]
@@ -80,14 +84,65 @@ func run(args []string, stdout, stderr io.Writer) error {
 		writer = file
 	}
 
-	if *format == "json" {
+	var writeErr error
+	switch *format {
+	case "json":
 		encoder := json.NewEncoder(writer)
 		encoder.SetIndent("", "  ")
-		return encoder.Encode(report)
+		writeErr = encoder.Encode(report)
+	case "sarif":
+		payload, err := report.SARIF()
+		if err == nil {
+			_, err = writer.Write(append(payload, '\n'))
+		}
+		writeErr = err
+	default:
+		_, writeErr = fmt.Fprint(writer, report.Text())
 	}
+	if writeErr != nil {
+		return writeErr
+	}
+	if findingsMeetThreshold(report.Findings, *failOn) {
+		return fmt.Errorf("scan found findings at or above %s severity", *failOn)
+	}
+	return nil
+}
 
-	_, err = fmt.Fprint(writer, report.Text())
-	return err
+func validSeverity(value string) bool {
+	switch value {
+	case "none", "low", "medium", "high", "critical":
+		return true
+	default:
+		return false
+	}
+}
+
+func findingsMeetThreshold(findings []scan.Finding, threshold string) bool {
+	minimum := severityRank(threshold)
+	if minimum == 0 {
+		return false
+	}
+	for _, finding := range findings {
+		if severityRank(strings.ToLower(finding.Severity)) >= minimum {
+			return true
+		}
+	}
+	return false
+}
+
+func severityRank(value string) int {
+	switch strings.ToLower(value) {
+	case "low":
+		return 1
+	case "medium":
+		return 2
+	case "high":
+		return 3
+	case "critical":
+		return 4
+	default:
+		return 0
+	}
 }
 
 func runInit(args []string, stdout, stderr io.Writer) error {
