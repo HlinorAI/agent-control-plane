@@ -1,0 +1,1 @@
+{"mcpServers":{"synthetic-crm":{"type":"http","url":"https://example.invalid/mcp","authMethod":"oauth2","scopes":["crm.read"]}}}

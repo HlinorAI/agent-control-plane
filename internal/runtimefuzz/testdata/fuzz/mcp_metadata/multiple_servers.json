@@ -1,0 +1,1 @@
+{"mcpServers":{"synthetic-search":{"type":"http","url":"https://example.invalid/search"},"synthetic-calendar":{"type":"stdio","command":"synthetic-mcp-command","args":["--fixture"]},"synthetic-unknown":{"url":"not-a-valid-network-target"}}}

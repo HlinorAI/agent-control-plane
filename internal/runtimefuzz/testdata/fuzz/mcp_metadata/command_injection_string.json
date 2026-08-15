@@ -1,0 +1,1 @@
+{"name":"synthetic-command-string","packages":[{"transport":{"type":"stdio","command":"sh -c 'touch SHOULD_NOT_EXIST && echo synthetic'","args":["$(touch SHOULD_NOT_EXIST)"]}}]}

@@ -10,7 +10,7 @@ on:
       - "internal/runtimefuzz/**"
       - "testdata/adversarial/**"
       - "testdata/fuzz/**"
-      - ".github/workflows/adversarial.yml"
+      - ".github/workflows/adversarial-fuzz.yml"
   push:
     branches: [main]
     paths:
@@ -18,7 +18,7 @@ on:
       - "internal/**"
       - "testdata/adversarial/**"
       - "testdata/fuzz/**"
-      - ".github/workflows/adversarial.yml"
+      - ".github/workflows/adversarial-fuzz.yml"
   schedule:
     - cron: "17 2 * * *"
   workflow_dispatch:
@@ -45,6 +45,23 @@ jobs:
           go-version-file: go.mod
           cache: false
 
+      - name: Validate fuzz payloads
+        run: |
+          go run ./cmd/fuzzpayloadcheck \
+            -root internal/runtimefuzz/testdata/fuzz \
+            -max-bytes 262144 \
+            -allow-adversarial \
+            > fuzz-payload-validation.json
+
+      - name: Upload validation report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-payload-validation-${{ github.run_id }}
+          retention-days: 14
+          if-no-files-found: ignore
+          path: fuzz-payload-validation.json
+
       - name: Verify formatting
         run: test -z "$(gofmt -l .)"
 
@@ -59,10 +76,16 @@ jobs:
 
   runtime-fuzz-smoke:
     name: Runtime fuzz smoke
-    if: ${{ github.event_name != 'schedule' }}
+    if: ${{ github.event_name == 'pull_request' || github.event_name == 'push' }}
     needs: fast-corpus
     runs-on: ubuntu-latest
     timeout-minutes: 8
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - FuzzToolCallArguments
+          - FuzzMCPMetadata
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -73,17 +96,23 @@ jobs:
           go-version-file: go.mod
           cache: false
 
-      - name: Fuzz tool-call arguments
-        run: go test ./internal/runtimefuzz -fuzz '^FuzzToolCallArguments$' -fuzztime=10s -count=1
+      - name: Fuzz ${{ matrix.target }}
+        run: go test ./internal/runtimefuzz -fuzz '^${{ matrix.target }}$' -fuzztime=10s -count=1
 
-      - name: Fuzz MCP metadata
-        run: go test ./internal/runtimefuzz -fuzz '^FuzzMCPMetadata$' -fuzztime=10s -count=1
+      - name: Race check
+        run: go test -race ./internal/runtimefuzz
 
   nightly-fuzz:
     name: Nightly fuzz campaign
     if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - FuzzToolCallArguments
+          - FuzzMCPMetadata
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -93,6 +122,14 @@ jobs:
         with:
           go-version-file: go.mod
           cache: false
+
+      - name: Validate fuzz payloads
+        run: |
+          go run ./cmd/fuzzpayloadcheck \
+            -root internal/runtimefuzz/testdata/fuzz \
+            -max-bytes 262144 \
+            -allow-adversarial \
+            > fuzz-payload-validation.json
 
       - name: Run full corpus
         run: go test ./... -count=1
@@ -100,18 +137,16 @@ jobs:
       - name: Run race tests
         run: go test -race ./...
 
-      - name: Fuzz tool-call arguments
-        run: go test ./internal/runtimefuzz -fuzz '^FuzzToolCallArguments$' -fuzztime=15m -count=1
-
-      - name: Fuzz MCP metadata
-        run: go test ./internal/runtimefuzz -fuzz '^FuzzMCPMetadata$' -fuzztime=15m -count=1
+      - name: Fuzz ${{ matrix.target }}
+        run: go test ./internal/runtimefuzz -fuzz '^${{ matrix.target }}$' -fuzztime=15m -count=1
 
       - name: Upload fuzz artifacts on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: fuzz-failure-${{ github.run_id }}
+          name: fuzz-failure-${{ matrix.target }}-${{ github.run_id }}
           if-no-files-found: ignore
+          retention-days: 14
           path: |
             testdata/fuzz/**
             /tmp/**/testdata/fuzz/**

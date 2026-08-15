@@ -1,0 +1,1 @@
+{"mcpServers":{"synthetic-server":{"type":"http","url":"https://example.invalid/one"},"SYNTHETIC-SERVER":{"type":"stdio","command":"synthetic-command"}}}

@@ -1,0 +1,1 @@
+{"name":"synthetic-auth-conflict","server":{"url":"https://example.invalid/mcp","authMethod":"none","authorization":"Bearer SYNTHETIC-NOT-A-CREDENTIAL","scopes":["admin","read"]}}

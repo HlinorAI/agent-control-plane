@@ -1,0 +1,1 @@
+{"mcpServers":{"newline":{"url":"https://example.invalid/a\nX-Injected: true"},"userinfo":{"url":"https://user:pass@example.invalid/mcp"},"file":{"url":"file:///etc/passwd"},"loopback":{"url":"http://127.0.0.1:9/"},"ipv6":{"url":"http://[::1]:9/"}}}

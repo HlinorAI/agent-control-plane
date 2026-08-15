@@ -4,11 +4,14 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"embed"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -21,6 +24,15 @@ const (
 	maxObjectEntries  = 2048
 	maxStringBytes    = 64 << 10
 	fuzzTimeout       = 250 * time.Millisecond
+)
+
+var (
+	//go:embed testdata/fuzz/tool_calls/*.json
+	toolCallSeedFS embed.FS
+	//go:embed testdata/fuzz/mcp_metadata/*.json
+	mcpMetadataSeedFS embed.FS
+	//go:embed testdata/fuzz/manifest.yaml
+	seedManifestData []byte
 )
 
 // FuzzToolCallArguments tests parsing and policy classification only. It never
@@ -42,6 +54,7 @@ func FuzzToolCallArguments(f *testing.F) {
 	for _, seed := range seeds {
 		f.Add(seed)
 	}
+	addEmbeddedSeeds(f, toolCallSeedFS, "testdata/fuzz/tool_calls")
 
 	f.Fuzz(func(t *testing.T, input []byte) {
 		if len(input) > maxFuzzInputBytes {
@@ -58,6 +71,10 @@ func FuzzToolCallArguments(f *testing.F) {
 			t.Fatalf("unexpected parser error: %v", err)
 		}
 		assertSafeResult(t, ctx, result)
+		repeated, repeatErr := safeParseToolCall(ctx, input)
+		if repeatErr != nil || repeated != result {
+			t.Fatalf("non-deterministic tool-call result: first=%+v repeated=%+v err=%v", result, repeated, repeatErr)
+		}
 	})
 }
 
@@ -80,6 +97,7 @@ func FuzzMCPMetadata(f *testing.F) {
 	for _, seed := range seeds {
 		f.Add(seed)
 	}
+	addEmbeddedSeeds(f, mcpMetadataSeedFS, "testdata/fuzz/mcp_metadata")
 
 	f.Fuzz(func(t *testing.T, input []byte) {
 		if len(input) > maxFuzzInputBytes {
@@ -96,7 +114,31 @@ func FuzzMCPMetadata(f *testing.F) {
 			t.Fatalf("unexpected MCP parser error: %v", err)
 		}
 		assertSafeResult(t, ctx, result)
+		repeated, repeatErr := safeParseMCPMetadata(ctx, input)
+		if repeatErr != nil || repeated != result {
+			t.Fatalf("non-deterministic MCP result: first=%+v repeated=%+v err=%v", result, repeated, repeatErr)
+		}
 	})
+}
+
+func addEmbeddedSeeds(f *testing.F, seedFS embed.FS, directory string) {
+	f.Helper()
+	entries, err := fs.ReadDir(seedFS, directory)
+	if err != nil {
+		f.Fatalf("read embedded seed directory %s: %v", directory, err)
+	}
+	sort.Slice(entries, func(i, j int) bool { return entries[i].Name() < entries[j].Name() })
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		path := directory + "/" + entry.Name()
+		seed, err := fs.ReadFile(seedFS, path)
+		if err != nil {
+			f.Fatalf("read embedded seed %s: %v", path, err)
+		}
+		f.Add(seed)
+	}
 }
 
 type safeResult struct {
@@ -107,10 +149,70 @@ type safeResult struct {
 	ProcessesSpawned int
 }
 
+type seedManifestFile struct {
+	Cases []seedCase `json:"cases"`
+}
+
+type seedCase struct {
+	ID      string `json:"id"`
+	Surface string `json:"surface"`
+	Kind    string `json:"kind"`
+	Input   string `json:"input"`
+}
+
 var (
 	errMalformed = errors.New("malformed input")
 	errLimit     = errors.New("input limit exceeded")
 )
+
+func TestSeedManifest(t *testing.T) {
+	var manifest seedManifestFile
+	if err := json.Unmarshal(seedManifestData, &manifest); err != nil {
+		t.Fatalf("decode fuzz seed manifest: %v", err)
+	}
+	if len(manifest.Cases) != 30 {
+		t.Fatalf("expected 30 fuzz seed cases, got %d", len(manifest.Cases))
+	}
+	seen := map[string]bool{}
+	counts := map[string]int{}
+	for _, seed := range manifest.Cases {
+		if seed.ID == "" || seen[seed.ID] {
+			t.Fatalf("invalid or duplicate seed ID: %q", seed.ID)
+		}
+		seen[seed.ID] = true
+		if seed.Surface != "tool_call_arguments" && seed.Surface != "mcp_metadata" {
+			t.Fatalf("unsupported seed surface %q", seed.Surface)
+		}
+		switch seed.Kind {
+		case "positive", "negative", "ambiguous", "adversarial", "robustness":
+		default:
+			t.Fatalf("unsupported seed kind %q", seed.Kind)
+		}
+		if !strings.HasPrefix(seed.Input, "testdata/fuzz/") {
+			t.Fatalf("seed input escapes fuzz corpus: %q", seed.Input)
+		}
+		expectedDirectory := "/mcp_metadata/"
+		if seed.Surface == "tool_call_arguments" {
+			expectedDirectory = "/tool_calls/"
+		}
+		if !strings.Contains(seed.Input, expectedDirectory) {
+			t.Fatalf("seed input does not match surface %q: %q", seed.Surface, seed.Input)
+		}
+		var seedFS embed.FS
+		if seed.Surface == "tool_call_arguments" {
+			seedFS = toolCallSeedFS
+		} else {
+			seedFS = mcpMetadataSeedFS
+		}
+		if _, err := fs.ReadFile(seedFS, seed.Input); err != nil {
+			t.Fatalf("seed file %q is not embedded: %v", seed.Input, err)
+		}
+		counts[seed.Surface]++
+	}
+	if counts["tool_call_arguments"] != 15 || counts["mcp_metadata"] != 15 {
+		t.Fatalf("unexpected seed surface counts: %+v", counts)
+	}
+}
 
 func assertSafeResult(t *testing.T, ctx context.Context, result safeResult) {
 	t.Helper()
