@@ -7,7 +7,9 @@ on:
       - "internal/scan/**"
       - "internal/config/**"
       - "internal/adversarial/**"
+      - "internal/runtimefuzz/**"
       - "testdata/adversarial/**"
+      - "testdata/fuzz/**"
       - ".github/workflows/adversarial.yml"
   push:
     branches: [main]
@@ -15,7 +17,10 @@ on:
       - "cmd/**"
       - "internal/**"
       - "testdata/adversarial/**"
+      - "testdata/fuzz/**"
       - ".github/workflows/adversarial.yml"
+  schedule:
+    - cron: "17 2 * * *"
   workflow_dispatch:
 
 concurrency:
@@ -51,3 +56,62 @@ jobs:
 
       - name: Run vet
         run: go vet ./...
+
+  runtime-fuzz-smoke:
+    name: Runtime fuzz smoke
+    if: ${{ github.event_name != 'schedule' }}
+    needs: fast-corpus
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Fuzz tool-call arguments
+        run: go test ./internal/runtimefuzz -fuzz '^FuzzToolCallArguments$' -fuzztime=10s -count=1
+
+      - name: Fuzz MCP metadata
+        run: go test ./internal/runtimefuzz -fuzz '^FuzzMCPMetadata$' -fuzztime=10s -count=1
+
+  nightly-fuzz:
+    name: Nightly fuzz campaign
+    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Run full corpus
+        run: go test ./... -count=1
+
+      - name: Run race tests
+        run: go test -race ./...
+
+      - name: Fuzz tool-call arguments
+        run: go test ./internal/runtimefuzz -fuzz '^FuzzToolCallArguments$' -fuzztime=15m -count=1
+
+      - name: Fuzz MCP metadata
+        run: go test ./internal/runtimefuzz -fuzz '^FuzzMCPMetadata$' -fuzztime=15m -count=1
+
+      - name: Upload fuzz artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-failure-${{ github.run_id }}
+          if-no-files-found: ignore
+          path: |
+            testdata/fuzz/**
+            /tmp/**/testdata/fuzz/**

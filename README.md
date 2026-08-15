@@ -38,9 +38,13 @@ Run the manifest-driven adversarial corpus:
 ```bash
 go test ./internal/adversarial -run TestAdversarialCorpus -count=1 -v
 go test ./internal/adversarial -count=1 -v
+go test ./internal/runtimefuzz -fuzz '^FuzzToolCallArguments$' -fuzztime=2s -count=1
+go test ./internal/runtimefuzz -fuzz '^FuzzMCPMetadata$' -fuzztime=2s -count=1
 ```
 
 The corpus uses synthetic fixtures and checks structured JSON/SARIF/text output, deterministic results, secret non-disclosure, inert command handling, network isolation, root containment, malformed input handling, and CLI severity exit codes.
+
+The runtime fuzz targets are standalone safe parser seams. They classify in-memory tool-call and MCP metadata only; they do not dispatch tools, start processes, read files, install packages, resolve credentials, or contact URLs.
 
 ## What it does
 
