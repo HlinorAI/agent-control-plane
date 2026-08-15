@@ -1,0 +1,1 @@
+{"tool":"finance.transfer","arguments":{"amount":"1000","currency":840,"dry_run":"false","approval":false},"schema":{"amount":"number","dry_run":"boolean","approval":"required"}}

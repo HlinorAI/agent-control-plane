@@ -23,6 +23,29 @@ jobs:
           go-version-file: go.mod
           cache: false
 
+      - name: Validate fuzz payloads
+        run: |
+          go run ./cmd/fuzzpayloadcheck \
+            -root internal/runtimefuzz/testdata/fuzz \
+            -max-bytes 262144 \
+            -allow-adversarial \
+            > fuzz-payload-validation.json
+
+      - name: Run full tests
+        run: go test ./... -count=1
+
+      - name: Run race tests
+        run: go test -race ./...
+
+      - name: Run vet
+        run: go vet ./...
+
+      - name: Run tool-call fuzz gate
+        run: go test ./internal/runtimefuzz -fuzz '^FuzzToolCallArguments$' -fuzztime=15m -count=1
+
+      - name: Run MCP metadata fuzz gate
+        run: go test ./internal/runtimefuzz -fuzz '^FuzzMCPMetadata$' -fuzztime=15m -count=1
+
       - name: Build and publish release artifacts
         uses: goreleaser/goreleaser-action@v6
         with:

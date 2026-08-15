@@ -1,0 +1,44 @@
+{
+  "cases": [
+    {
+      "id": "ADV-DEMO-001",
+      "description": "Existing demo repository remains deterministic and preserves representative findings",
+      "root": "testdata/demo",
+      "expected": {
+        "exit_code": 0,
+        "rule_counts": {"ACP-003": 2, "ACP-005": 2, "ACP-006": 1},
+        "min_agents": 3,
+        "min_sources": 6
+      },
+      "security_invariants": ["deterministic"],
+      "formats": ["json", "sarif", "text"]
+    },
+    {
+      "id": "ADV-REGRESSION-001",
+      "description": "Framework internals and examples are ignored while a declarative registry agent remains visible",
+      "root": "testdata/regression",
+      "expected": {
+        "exit_code": 0,
+        "rule_counts": {},
+        "min_agents": 1,
+        "min_sources": 1
+      },
+      "security_invariants": ["deterministic"],
+      "formats": ["json", "sarif"]
+    },
+    {
+      "id": "ADV-SECRET-001",
+      "description": "Synthetic secret and inert command are redacted and never executed",
+      "root": "testdata/adversarial/secret-and-inert-agent",
+      "expected": {
+        "exit_code": 0,
+        "rule_counts": {"ACP-006": 1},
+        "min_agents": 1,
+        "min_sources": 1
+      },
+      "secrets": ["prod-api-token-SYNTHETIC-NOT-REAL"],
+      "security_invariants": ["no_secret_leak", "no_marker_created", "deterministic"],
+      "formats": ["json", "sarif", "text"]
+    }
+  ]
+}

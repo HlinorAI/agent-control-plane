@@ -1,0 +1,1 @@
+{"name":"synthetic-filesystem","version":"0.0.1-test","packages":[{"registryType":"npm","identifier":"synthetic-mcp-server","transport":{"type":"stdio"}}]}

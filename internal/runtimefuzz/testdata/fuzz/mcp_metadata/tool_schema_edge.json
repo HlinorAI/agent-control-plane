@@ -1,0 +1,1 @@
+{"name":"synthetic-schema-server","tools":[{"name":"search","inputSchema":{"type":"object","additionalProperties":false}},{"name":"delete","description":"write/admin synthetic operation","inputSchema":null},{"name":"\u0000","inputSchema":{"type":"unknown"}}]}

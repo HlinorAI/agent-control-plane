@@ -33,6 +33,22 @@ go run ./cmd/agentctl scan ./testdata/demo
 The fixture intentionally produces three agents, one MCP server and findings across `ACP-001` through `ACP-010`.
 The committed [sample SARIF report](testdata/demo/sample-report.sarif) shows the format without exposing secret values.
 
+Run the manifest-driven adversarial corpus:
+
+```bash
+go test ./internal/adversarial -run TestAdversarialCorpus -count=1 -v
+go test ./internal/adversarial -count=1 -v
+go test ./internal/runtimefuzz -fuzz '^FuzzToolCallArguments$' -fuzztime=2s -count=1
+go test ./internal/runtimefuzz -fuzz '^FuzzMCPMetadata$' -fuzztime=2s -count=1
+go run ./cmd/fuzzpayloadcheck -root internal/runtimefuzz/testdata/fuzz -max-bytes 262144 -allow-adversarial > fuzz-payload-validation.json
+```
+
+The corpus uses synthetic fixtures and checks structured JSON/SARIF/text output, deterministic results, secret non-disclosure, inert command handling, network isolation, root containment, malformed input handling, and CLI severity exit codes.
+
+The runtime fuzz targets are standalone safe parser seams. They classify in-memory tool-call and MCP metadata only; they do not dispatch tools, start processes, read files, install packages, resolve credentials, or contact URLs. The file-backed seed corpus and manifest live under `internal/runtimefuzz/testdata/fuzz/`; the separate `.github/workflows/adversarial-fuzz.yml` workflow runs matrix smoke/nightly checks, while tagged releases repeat the fuzz gates before GoReleaser.
+
+`fuzzpayloadcheck` runs in strict mode by default. The `-allow-adversarial` option is only for the committed negative-case corpus: it permits expected malformed, duplicate-key, unsafe-URL, control-character, and inert command fixtures while keeping credential-like values, invalid UTF-8, resource-limit violations, unsafe paths, and filesystem errors blocking.
+
 ## What it does
 
 The CLI scans an approved local directory in read-only mode and produces text or JSON inventory containing:
@@ -109,6 +125,8 @@ go build ./cmd/agentctl
 ```
 
 The repository uses GitHub Actions for these checks and GoReleaser for tagged alpha binaries.
+
+Suspicious fuzz payloads are treated as untrusted artifacts. See the [security policy](SECURITY.md) and the [quarantine record template](security/quarantine-record.example.json) before handling a validator rejection.
 
 ## License
 

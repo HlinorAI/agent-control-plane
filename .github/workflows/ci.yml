@@ -29,6 +29,9 @@ jobs:
       - name: Run tests
         run: go test ./...
 
+      - name: Run adversarial regression corpus
+        run: go test ./internal/adversarial -run TestAdversarialCorpus -count=1 -v
+
       - name: Run vet
         run: go vet ./...
 

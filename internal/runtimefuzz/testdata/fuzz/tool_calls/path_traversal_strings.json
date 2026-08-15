@@ -1,0 +1,1 @@
+{"tool":"file.read","arguments":{"path":"../../outside-root/synthetic.txt","alternate":"/etc/passwd","encoded":"%2e%2e/%2e%2e/synthetic"}}
