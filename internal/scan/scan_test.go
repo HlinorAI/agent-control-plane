@@ -153,6 +153,55 @@ func TestRunIgnoresFixturesAndRuntimeImplementationCode(t *testing.T) {
 	}
 }
 
+func TestRunIgnoresFrameworkLibraryInternalsAndSamples(t *testing.T) {
+	root := t.TempDir()
+	files := map[string]string{
+		"lib/framework/agents/base.py":                        "from crewai import Agent\nmodel = \"openai/gpt-4o\"\n",
+		"libs/framework/agents/base.py":                       "from langchain_openai import ChatOpenAI\nmodel = ChatOpenAI()\ntools: list = []\n",
+		"packages/framework/agents/openai_assistant_agent.py": "from autogen import AssistantAgent\nmodel = \"openai/gpt-4o\"\n",
+		"samples/agent.py":                                    "name: sample-agent\nmodel: openai\n",
+		"docs_src/tutorial.py":                                "mcp_server: demo\nmodel: openai\n",
+	}
+	for relative, content := range files {
+		path := filepath.Join(root, filepath.FromSlash(relative))
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	report, err := Run(root, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(report.Agents) != 0 || len(report.Findings) != 0 {
+		t.Fatalf("framework internals or samples were inventoried: %+v", report)
+	}
+}
+
+func TestRunDetectsDeclarativeAgentRegistryEntry(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "registry", "agents", "ticket-triage-agent.yaml")
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	content := "type: agent\nname: Ticket Triage Agent\nmodel: openai/gpt-4o\nowner: support-platform\n"
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	report, err := Run(root, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(report.Agents) != 1 || report.Agents[0].Name != "Ticket Triage Agent" {
+		t.Fatalf("declarative registry agent was not detected: %+v", report.Agents)
+	}
+	if len(report.Findings) != 0 {
+		t.Fatalf("unexpected findings for owned registry agent: %+v", report.Findings)
+	}
+}
+
 func TestRunCollectsMCPJSONMetadata(t *testing.T) {
 	root := t.TempDir()
 	clientConfig := `{"mcpServers":{"docs":{"type":"http","url":"https://example.test/mcp"}}}`

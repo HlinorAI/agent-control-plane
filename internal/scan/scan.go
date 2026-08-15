@@ -48,6 +48,8 @@ var (
 	verifiedPattern             = regexp.MustCompile(`(?im)^\s*["']?(last[_ -]?verified|verified[_ -]?at)["']?\s*[:=]`)
 	transportPattern            = regexp.MustCompile(`(?im)^\s*["']?transport["']?\s*[:=]`)
 	authMethodPattern           = regexp.MustCompile(`(?im)^\s*["']?(auth[_ -]?method|authentication)["']?\s*[:=]`)
+	staticNamePattern           = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,80}$`)
+	staticNameYAMLPattern       = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9 ._-]{0,80}$`)
 )
 
 type candidate struct {
@@ -468,7 +470,10 @@ func inspectFile(path, relative string) (*candidate, error) {
 		}
 		if name == "" && declarationMatch(line, namePattern) {
 			name = declarationValue(line, namePattern)
-			nameExplicit = name != "" && name != "unknown"
+			nameExplicit = name != "" && name != "unknown" && staticNameDeclaration(line)
+			if firstSignal == 0 && nameExplicit && isAgentPath(relative) && isAgentName(name) {
+				firstSignal = lineNumber
+			}
 		}
 		if identity == "" && declarationMatch(line, identityPattern) {
 			identity = declarationValue(line, identityPattern)
@@ -704,7 +709,7 @@ func supportedFile(path, name string) bool {
 
 func ignoredDirectory(name string) bool {
 	switch name {
-	case ".agentctl", ".claude", ".github", ".git", ".hg", ".svn", ".storybook", "__tests__", "e2e", "test-servers", "node_modules", "vendor", "dist", "build", ".venv", "__pycache__", "examples", "example", "tests", "test", "testdata", "fixtures", "benchmarks", "docs", "doc", "schemas", "schema":
+	case ".agentctl", ".claude", ".github", ".git", ".hg", ".svn", ".storybook", "__tests__", "e2e", "test-servers", "node_modules", "vendor", "dist", "build", ".venv", "__pycache__", "examples", "example", "samples", "sample", "demos", "demo", "tutorials", "tutorial", "docs_src", "tests", "test", "testdata", "fixtures", "benchmarks", "docs", "doc", "schemas", "schema":
 		return true
 	default:
 		return false
@@ -729,16 +734,64 @@ func runtimeMetadataPath(relative string) bool {
 }
 
 func isLikelyAgentCandidate(relative, name string, nameExplicit, modelDeclarationSignal, frameworkSignal bool, models []string, identity, mcpServer string, environmentExplicit bool) bool {
+	if isLibrarySourcePath(relative) && !environmentExplicit {
+		return false
+	}
+	if nameExplicit && isAgentPath(relative) && isAgentName(name) {
+		return true
+	}
+	if !isAgentPath(relative) || !isAgentEntryFile(relative) {
+		return false
+	}
 	if identity != "" || mcpServer != "" || environmentExplicit {
 		return true
 	}
-	if nameExplicit && isAgentName(name) {
+	return len(models) > 0 && (modelDeclarationSignal || frameworkSignal)
+}
+
+func staticNameDeclaration(line string) bool {
+	delimiter := ":"
+	parts := strings.SplitN(line, delimiter, 2)
+	if len(parts) != 2 {
+		delimiter = "="
+		parts = strings.SplitN(line, delimiter, 2)
+	}
+	if len(parts) != 2 {
+		return false
+	}
+	right := strings.TrimSpace(parts[1])
+	if len(right) >= 2 && strings.ContainsRune("`\"'", rune(right[0])) {
 		return true
 	}
-	if isAgentPath(relative) && (len(models) > 0 || frameworkSignal) {
-		return true
+	if delimiter == ":" {
+		return staticNameYAMLPattern.MatchString(right)
 	}
-	return modelDeclarationSignal && isAgentPath(relative)
+	return staticNamePattern.MatchString(strings.Trim(right, "`\"'"))
+}
+
+func isLibrarySourcePath(relative string) bool {
+	for _, part := range strings.Split(strings.ToLower(filepath.ToSlash(relative)), "/") {
+		switch part {
+		case "lib", "libs", "packages":
+			return true
+		}
+	}
+	return false
+}
+
+func isAgentEntryFile(relative string) bool {
+	base := strings.TrimSuffix(strings.ToLower(filepath.Base(relative)), filepath.Ext(relative))
+	for _, marker := range []string{"agent", "assistant", "copilot", "chatbot", "bot", "worker", "runner"} {
+		if strings.Contains(base, marker) {
+			return true
+		}
+	}
+	switch base {
+	case "", "base", "__init__", "prompt", "prompts", "toolkit", "output_parser", "parser", "types", "models", "model", "context", "utils", "registry", "config", "schema", "manager", "middleware", "helpers", "constants", "version", "settings", "loading", "component", "api", "server", "client", "connection", "state", "states":
+		return false
+	default:
+		return isAgentPath(relative)
+	}
 }
 
 func isAgentName(name string) bool {
