@@ -1,17 +1,35 @@
-name: CI
+name: Adversarial Regression
 
 on:
+  pull_request:
+    paths:
+      - "cmd/**"
+      - "internal/scan/**"
+      - "internal/config/**"
+      - "internal/adversarial/**"
+      - "testdata/adversarial/**"
+      - ".github/workflows/adversarial.yml"
   push:
     branches: [main]
-  pull_request:
+    paths:
+      - "cmd/**"
+      - "internal/**"
+      - "testdata/adversarial/**"
+      - ".github/workflows/adversarial.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: adversarial-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
-  security-events: write
 
 jobs:
-  test:
+  fast-corpus:
+    name: Fast adversarial corpus
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -23,7 +41,6 @@ jobs:
           cache: false
 
       - name: Verify formatting
-        shell: bash
         run: test -z "$(gofmt -l .)"
 
       - name: Run tests
@@ -34,15 +51,3 @@ jobs:
 
       - name: Run vet
         run: go vet ./...
-
-      - name: Build CLI
-        run: go build ./cmd/agentctl
-
-      - name: Scan repository
-        run: go run ./cmd/agentctl scan . --format sarif --fail-on high --output agentctl.sarif
-
-      - name: Upload SARIF results
-        if: ${{ always() && hashFiles('agentctl.sarif') != '' }}
-        uses: github/codeql-action/upload-sarif@v4
-        with:
-          sarif_file: agentctl.sarif

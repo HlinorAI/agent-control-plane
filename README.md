@@ -33,6 +33,15 @@ go run ./cmd/agentctl scan ./testdata/demo
 The fixture intentionally produces three agents, one MCP server and findings across `ACP-001` through `ACP-010`.
 The committed [sample SARIF report](testdata/demo/sample-report.sarif) shows the format without exposing secret values.
 
+Run the manifest-driven adversarial corpus:
+
+```bash
+go test ./internal/adversarial -run TestAdversarialCorpus -count=1 -v
+go test ./internal/adversarial -count=1 -v
+```
+
+The corpus uses synthetic fixtures and checks structured JSON/SARIF/text output, deterministic results, secret non-disclosure, inert command handling, network isolation, root containment, malformed input handling, and CLI severity exit codes.
+
 ## What it does
 
 The CLI scans an approved local directory in read-only mode and produces text or JSON inventory containing:
