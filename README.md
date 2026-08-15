@@ -126,6 +126,8 @@ go build ./cmd/agentctl
 
 The repository uses GitHub Actions for these checks and GoReleaser for tagged alpha binaries.
 
+Suspicious fuzz payloads are treated as untrusted artifacts. See the [security policy](SECURITY.md) and the [quarantine record template](security/quarantine-record.example.json) before handling a validator rejection.
+
 ## License
 
 Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE).

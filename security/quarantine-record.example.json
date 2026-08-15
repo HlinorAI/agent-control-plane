@@ -1,0 +1,29 @@
+{
+  "schema_version": "quarantine.v1",
+  "quarantine_id": "Q-YYYY-NNNNN",
+  "payload_sha256": "<full-sha256>",
+  "source": "github-actions/adversarial-fuzz",
+  "source_run": "<github-run-id>",
+  "source_commit": "<commit-sha>",
+  "validator_version": "<version>",
+  "validator_codes": [
+    "dangerous_command"
+  ],
+  "size_bytes": 0,
+  "classification": "quarantined",
+  "contains_possible_secret": false,
+  "contains_customer_data": false,
+  "contains_execution_material": true,
+  "contains_network_material": true,
+  "static_analysis": "pending_offline_review",
+  "scrubbed_seed_id": null,
+  "vm_ticket": null,
+  "pagerduty_incident": null,
+  "owner": "agent-platform-security",
+  "reviewer": "<reviewer>",
+  "status": "quarantined",
+  "next_action": "metadata_only_triage",
+  "retention_until": "<timestamp>",
+  "raw_locator": "private://quarantine/Q-YYYY-NNNNN",
+  "raw_exposed": false
+}
