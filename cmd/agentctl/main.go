@@ -14,6 +14,8 @@ import (
 	"github.com/HlinorAI/agent-control-plane/internal/scan"
 )
 
+var version = "dev"
+
 func main() {
 	if err := run(os.Args[1:], os.Stdout, os.Stderr); err != nil {
 		fmt.Fprintln(os.Stderr, "agentctl:", err)
@@ -23,7 +25,14 @@ func main() {
 
 func run(args []string, stdout, stderr io.Writer) error {
 	if len(args) == 0 {
-		return errors.New("usage: agentctl init <path> | agentctl scan <path> [--config file] [--dry-run] [--format text|json] [--output file]")
+		return errors.New("usage: agentctl version | agentctl init <path> | agentctl scan <path> [--config file] [--dry-run] [--format text|json] [--output file]")
+	}
+	if args[0] == "version" || args[0] == "--version" || args[0] == "-v" {
+		if len(args) != 1 {
+			return errors.New("version does not accept arguments")
+		}
+		_, err := fmt.Fprintf(stdout, "agentctl %s\n", version)
+		return err
 	}
 	if args[0] == "init" {
 		return runInit(args[1:], stdout, stderr)

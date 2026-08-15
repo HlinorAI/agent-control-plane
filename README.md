@@ -1,28 +1,97 @@
 # Agent Control Plane
 
-Read-only discovery and evidence-backed inventory for internal AI agents.
+Read-only discovery and evidence-backed inventory for AI agents, tools, identities and MCP servers.
 
-## P0 CLI
+> Public alpha: the current scanner is a local, deterministic heuristic tool. It is useful for repository/configuration reviews, not a replacement for production security controls.
 
-The first slice is a local Go CLI. It reads approved text/configuration files, never executes repository contents, never sends data over the network, and emits only metadata and source locators.
+## Quick start
+
+Run locally from a checkout:
 
 ```bash
-go run ./cmd/agentctl init .
-go run ./cmd/agentctl scan . --dry-run
-go run ./cmd/agentctl scan . --format json
+go run ./cmd/agentctl version
+go run ./cmd/agentctl init ./workspace
+go run ./cmd/agentctl scan ./workspace --format text
+go run ./cmd/agentctl scan ./workspace --format json --output report.json
 ```
 
-`agentctl init` creates `.agentctl/config.yaml` with workspace policy, exclusions and a 30-day verification freshness TTL. Existing configuration is never overwritten. `agentctl scan` loads this file automatically when it exists; use `--config` to select another policy file inside the scan root.
+Install from the public module after the repository is released:
 
-The scanner detects likely agent/model/tool references, canonical relationships and explainable `ACP-001`–`ACP-010` findings. It filters common non-production paths such as tests, examples, fixtures and schemas, and keeps runtime code separate from JSON/YAML/TOML runtime metadata. It is intentionally heuristic and does not claim production status without source evidence. The MCP collector reads safe server/manifest metadata, including server name, transport and auth method, without reading secret values or payloads.
+```bash
+go install github.com/HlinorAI/agent-control-plane/cmd/agentctl@latest
+agentctl version
+agentctl scan . --format json --output report.json
+```
+
+Try the included risk fixture:
+
+```bash
+go run ./cmd/agentctl scan ./testdata/demo
+```
+
+The fixture intentionally produces three agents, one MCP server and findings across `ACP-001` through `ACP-010`.
+
+## What it does
+
+The CLI scans an approved local directory in read-only mode and produces text or JSON inventory containing:
+
+- likely agent entrypoints and declarative agent registry entries;
+- model/provider references;
+- tool and MCP references;
+- identities, environments and ownership declarations;
+- canonical relationships with source evidence;
+- deterministic risk findings with file/line evidence;
+- safe `.mcp.json` and `server.json` metadata such as server name, transport and auth method.
+
+The default policy excludes common non-production paths such as tests, examples, samples, tutorials, fixtures, documentation, schemas and framework library layouts. Use `.agentctl/config.yaml` to add workspace-specific exclusions and approved providers or MCP servers. `agentctl init` never overwrites an existing policy.
+
+## Risk rules
+
+The alpha includes ten explainable rules:
+
+| Rule | Detects |
+|---|---|
+| `ACP-001` | Missing agent owner/team |
+| `ACP-002` | Runtime agent without source inventory |
+| `ACP-003` | Shared identity across unrelated agents |
+| `ACP-004` | Write/admin capability in a read-only use case |
+| `ACP-005` | MCP server outside the approved registry |
+| `ACP-006` | Production credential referenced in development |
+| `ACP-007` | Sensitive tool without approval metadata |
+| `ACP-008` | Provider/model outside workspace policy |
+| `ACP-009` | Missing production disable/rollback path |
+| `ACP-010` | Stale agent verification metadata |
 
 ## Security boundary
 
 - read-only by default;
 - no arbitrary code execution;
-- no raw secrets or full payloads in reports;
-- metadata-only output;
-- deterministic findings with file/line evidence;
-- no network calls in the local P0 path.
+- repository contents are treated as untrusted data;
+- no raw secret values or full production payloads in reports;
+- metadata-only output and source locators;
+- no network calls in the local scan path;
+- deterministic findings; no LLM in the critical risk-decision path;
+- bounded file size, file count and total scan input.
 
-Local planning, market research, roadmap, architecture and security preparation files are intentionally ignored by GitHub. The repository contains the working CLI, tests, fixtures and runtime configuration.
+## Current limitations
+
+- Detection is heuristic and should be reviewed by a human.
+- The alpha scans local repositories and configuration files; GitHub, GitLab, Docker and Kubernetes connectors are not implemented yet.
+- No runtime proxy, IAM remediation, hosted control plane, dashboard or compliance certification is included.
+- JSON is the stable report format for the current slice; CSV, SARIF and issue export are planned.
+
+## Development
+
+Requirements: Go 1.26 or newer.
+
+```bash
+go test ./...
+go vet ./...
+go build ./cmd/agentctl
+```
+
+The repository uses GitHub Actions for these checks and GoReleaser for tagged alpha binaries.
+
+## License
+
+Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE).

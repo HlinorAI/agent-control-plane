@@ -22,6 +22,17 @@ func TestRunUsesProvidedScanPath(t *testing.T) {
 	}
 }
 
+func TestRunVersion(t *testing.T) {
+	var output bytes.Buffer
+	var errors bytes.Buffer
+	if err := run([]string{"version"}, &output, &errors); err != nil {
+		t.Fatal(err)
+	}
+	if output.String() != "agentctl dev\n" {
+		t.Fatalf("unexpected version output: %q", output.String())
+	}
+}
+
 func TestRunInitCreatesConfigWithoutOverwriting(t *testing.T) {
 	root := t.TempDir()
 	var output bytes.Buffer
