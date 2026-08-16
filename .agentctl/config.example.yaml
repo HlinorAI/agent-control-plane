@@ -3,7 +3,6 @@
 
 exclude:
   - .git
-  - .github
   - vendor
   - node_modules
   - dist

@@ -65,7 +65,7 @@ func TestRunDryRunDoesNotParseContent(t *testing.T) {
 	}
 }
 
-func TestRunIgnoresDocumentationFiles(t *testing.T) {
+func TestRunDoesNotInventoryRootDocumentation(t *testing.T) {
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "README.md"), []byte("production agent uses MCP and OpenAI"), 0o600); err != nil {
 		t.Fatal(err)
@@ -74,8 +74,8 @@ func TestRunIgnoresDocumentationFiles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if report.FilesScanned != 0 || len(report.Agents) != 0 || len(report.Findings) != 0 {
-		t.Fatalf("documentation should not be inventoried: %+v", report)
+	if report.FilesScanned != 1 || len(report.Agents) != 0 || len(report.Findings) != 0 {
+		t.Fatalf("root documentation should be scanned without inventorying an agent: %+v", report)
 	}
 }
 
@@ -153,7 +153,7 @@ func TestRunIgnoresFixturesAndRuntimeImplementationCode(t *testing.T) {
 	}
 }
 
-func TestRunIgnoresFrameworkLibraryInternalsAndSamples(t *testing.T) {
+func TestRunDetectsFrameworkLibraryAgentsAndIgnoresSamples(t *testing.T) {
 	root := t.TempDir()
 	files := map[string]string{
 		"lib/framework/agents/base.py":                        "from crewai import Agent\nmodel = \"openai/gpt-4o\"\n",
@@ -175,8 +175,81 @@ func TestRunIgnoresFrameworkLibraryInternalsAndSamples(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if len(report.Agents) != 1 || report.Agents[0].SourcePath != "packages/framework/agents/openai_assistant_agent.py" {
+		t.Fatalf("expected the concrete framework agent entry to be inventoried: %+v", report.Agents)
+	}
+	if len(report.Findings) != 1 || report.Findings[0].RuleID != "ACP-001" || report.Findings[0].Severity != "Note" {
+		t.Fatalf("expected only an informational owner gap: %+v", report.Findings)
+	}
+}
+
+func TestRunCollectsAllMCPServersAndAppliesApprovalRule(t *testing.T) {
+	root := t.TempDir()
+	clientConfig := `{"mcpServers":{"docs":{"type":"http","url":"https://example.test/mcp"},"unknown":{"command":"npx","args":["-y","untrusted-server"]}}}`
+	if err := os.WriteFile(filepath.Join(root, ".mcp.json"), []byte(clientConfig), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	policyPath := filepath.Join(root, ".agentctl", "config.yaml")
+	policy := config.Default(".")
+	policy.ApprovedMCPServers = []string{"docs"}
+	if err := config.WriteDefault(policyPath, policy); err != nil {
+		t.Fatal(err)
+	}
+	report, err := Run(root, Options{ConfigPath: policyPath})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(report.MCPServers) != 2 || len(report.Sources) != 1 {
+		t.Fatalf("expected both MCP servers and one deduplicated source, got servers=%+v sources=%+v", report.MCPServers, report.Sources)
+	}
+	if len(report.Findings) != 1 || report.Findings[0].RuleID != "ACP-005" {
+		t.Fatalf("expected one unapproved MCP finding, got %+v", report.Findings)
+	}
+	if report.Findings[0].Evidence[0].Path != ".mcp.json" || report.Findings[0].Evidence[0].Line < 1 {
+		t.Fatalf("expected MCP source evidence, got %+v", report.Findings[0].Evidence)
+	}
+}
+
+func TestRunDiscoversAgentMarkdownUnderToolingDirectories(t *testing.T) {
+	root := t.TempDir()
+	files := map[string]string{
+		".claude/agents/support-agent.md": "name: support-agent\nmodel: openai\nowner: platform\n",
+		".github/agents/release-agent.md": "name: release-agent\nmodel: openai\nowner: release\n",
+	}
+	for relative, content := range files {
+		path := filepath.Join(root, filepath.FromSlash(relative))
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	report, err := Run(root, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(report.Agents) != 2 || len(report.Findings) != 0 {
+		t.Fatalf("expected two owned Markdown agents without findings: agents=%+v findings=%+v", report.Agents, report.Findings)
+	}
+}
+
+func TestRunDoesNotInventoryGenericGitHubWorkflow(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, ".github", "workflows", "agentctl-pr.yml")
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	content := "name: Agent Control Plane pull request scan\non: [pull_request]\njobs:\n  scan:\n    runs-on: ubuntu-latest\n"
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	report, err := Run(root, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(report.Agents) != 0 || len(report.Findings) != 0 {
-		t.Fatalf("framework internals or samples were inventoried: %+v", report)
+		t.Fatalf("generic GitHub workflow was inventoried as an agent: %+v", report)
 	}
 }
 
@@ -207,11 +280,20 @@ func TestRunRegressionFixtures(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(report.Agents) != 1 || report.Agents[0].Name != "Ticket Triage Agent" {
+	if len(report.Agents) != 2 {
 		t.Fatalf("unexpected regression inventory: %+v", report.Agents)
 	}
-	if len(report.Findings) != 0 {
-		t.Fatalf("regression fixtures produced unexpected findings: %+v", report.Findings)
+	foundRegistryAgent := false
+	for _, agent := range report.Agents {
+		if agent.Name == "Ticket Triage Agent" && agent.SourcePath == "registry/agents/ticket-triage-agent.yaml" {
+			foundRegistryAgent = true
+		}
+	}
+	if !foundRegistryAgent {
+		t.Fatalf("declarative registry agent was not preserved: %+v", report.Agents)
+	}
+	if len(report.Findings) != 1 || report.Findings[0].RuleID != "ACP-001" || report.Findings[0].Severity != "Note" {
+		t.Fatalf("expected only an informational owner gap for the library agent: %+v", report.Findings)
 	}
 }
 

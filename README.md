@@ -62,7 +62,7 @@ The CLI scans an approved local directory in read-only mode and produces text or
 - SARIF 2.1.0 output for GitHub Code Scanning and other security tooling;
 - safe `.mcp.json` and `server.json` metadata such as server name, transport and auth method.
 
-The default policy excludes common non-production paths such as tests, examples, samples, tutorials, fixtures, documentation, schemas and framework library layouts. Use `.agentctl/config.yaml` to add workspace-specific exclusions and approved providers or MCP servers. `agentctl init` never overwrites an existing policy.
+The default policy excludes common non-production paths such as tests, examples, samples, tutorials, fixtures, documentation and schemas. Agent definitions under tooling directories such as `.claude` and `.github`, Markdown agent files, and framework library layouts remain scannable when they contain strong agent signals. Use `.agentctl/config.yaml` to add workspace-specific exclusions and approved providers or MCP servers. `agentctl init` never overwrites an existing policy.
 
 ## Risk rules
 
@@ -70,7 +70,7 @@ The alpha includes ten explainable rules:
 
 | Rule | Detects |
 |---|---|
-| `ACP-001` | Missing agent owner/team |
+| `ACP-001` | Missing agent owner/team (informational unless production is explicit) |
 | `ACP-002` | Runtime agent without source inventory |
 | `ACP-003` | Shared identity across unrelated agents |
 | `ACP-004` | Write/admin capability in a read-only use case |
@@ -91,6 +91,7 @@ The alpha includes ten explainable rules:
 - no network calls in the local scan path;
 - deterministic findings; no LLM in the critical risk-decision path;
 - bounded file size, file count and total scan input.
+- local pre-commit protection checks staged diff additions, sensitive filenames, symlinks and secret-like patterns; CI remains authoritative for full history and artifact checks.
 
 ## Current limitations
 

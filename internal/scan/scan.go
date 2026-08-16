@@ -164,9 +164,7 @@ func Run(root string, options Options) (Report, error) {
 			report.FilesSkipped++
 			return nil
 		}
-		if found != nil {
-			candidates = append(candidates, *found)
-		}
+		candidates = append(candidates, found...)
 		return nil
 	})
 	if err != nil {
@@ -199,6 +197,8 @@ func Run(root string, options Options) (Report, error) {
 
 	identityAgents := map[string][]Agent{}
 	agentItems := map[string]candidate{}
+	mcpEvidence := map[string]Evidence{}
+	sourceSeen := map[string]bool{}
 	for _, item := range candidates {
 		sourceType, trustLevel := "repository_file", "observed"
 		if item.kind == "runtime" {
@@ -208,9 +208,12 @@ func Run(root string, options Options) (Report, error) {
 		} else if item.kind == "registry" {
 			sourceType, trustLevel = "policy_registry", "declared"
 		}
-		report.Sources = append(report.Sources, Source{
-			ID: stableID("source", item.path), Type: sourceType, Path: item.path, TrustLevel: trustLevel,
-		})
+		if !sourceSeen[item.path] {
+			report.Sources = append(report.Sources, Source{
+				ID: stableID("source", item.path), Type: sourceType, Path: item.path, TrustLevel: trustLevel,
+			})
+			sourceSeen[item.path] = true
+		}
 	}
 
 	for _, item := range candidates {
@@ -218,6 +221,7 @@ func Run(root string, options Options) (Report, error) {
 			if !containsMCPServer(report.MCPServers, item.mcpServer) {
 				report.MCPServers = append(report.MCPServers, MCPServer{ID: stableID("mcp", strings.ToLower(item.mcpServer)), Name: item.mcpServer, Approved: approvedServers[strings.ToLower(item.mcpServer)], Transport: item.mcpTransport, AuthMethod: item.mcpAuthMethod, Tools: item.mcpTools, SourcePath: item.path})
 			}
+			mcpEvidence[strings.ToLower(item.mcpServer)] = Evidence{Path: item.path, Line: item.mcpLine}
 			continue
 		}
 		if item.kind == "registry" {
@@ -286,6 +290,9 @@ func Run(root string, options Options) (Report, error) {
 			report.MCPServers = append(report.MCPServers, MCPServer{ID: stableID("mcp", strings.ToLower(item.mcpServer)), Name: item.mcpServer, Approved: approvedServers[strings.ToLower(item.mcpServer)], Transport: item.mcpTransport, AuthMethod: item.mcpAuthMethod, Tools: item.mcpTools, SourcePath: item.path})
 		}
 		if item.mcpServer != "" {
+			if _, exists := mcpEvidence[strings.ToLower(item.mcpServer)]; !exists {
+				mcpEvidence[strings.ToLower(item.mcpServer)] = Evidence{Path: item.path, Line: item.mcpLine}
+			}
 			report.Relationships = append(report.Relationships, Relationship{
 				ID: stableID("relationship", agentID+":connects-to:"+item.mcpServer), FromType: "agent", FromID: agentID,
 				EdgeType: "CONNECTS_TO", ToType: "mcp_server", ToID: stableID("mcp", strings.ToLower(item.mcpServer)),
@@ -293,7 +300,7 @@ func Run(root string, options Options) (Report, error) {
 			})
 		}
 		if item.owner == "" {
-			severity := "Medium"
+			severity := "Note"
 			if item.environment == "production" {
 				severity = "High"
 			}
@@ -318,18 +325,6 @@ func Run(root string, options Options) (Report, error) {
 				Confidence:      0.80,
 				Evidence:        []Evidence{{Path: item.path, Line: item.permissionLine}},
 				RemediationHint: "Remove the write scope or document an explicit approved exception.",
-			})
-		}
-		if item.mcpServer != "" && !approvedServers[strings.ToLower(item.mcpServer)] {
-			report.Findings = append(report.Findings, Finding{
-				ID:              stableID("finding", agentID+":ACP-005"),
-				RuleID:          "ACP-005",
-				Severity:        "High",
-				Message:         "MCP server is not present in the approved registry",
-				AgentID:         agentID,
-				Confidence:      0.85,
-				Evidence:        []Evidence{{Path: item.path, Line: item.mcpLine}},
-				RemediationHint: "Review the server provenance and add it to the approved registry only after ownership and permission review.",
 			})
 		}
 		if item.productionCredential && strings.EqualFold(item.environment, "development") {
@@ -378,6 +373,23 @@ func Run(root string, options Options) (Report, error) {
 			})
 		}
 	}
+	for _, server := range report.MCPServers {
+		if server.Approved {
+			continue
+		}
+		evidence := mcpEvidence[strings.ToLower(server.Name)]
+		mcpID := stableID("mcp", strings.ToLower(server.Name))
+		report.Findings = append(report.Findings, Finding{
+			ID:              stableID("finding", mcpID+":ACP-005"),
+			RuleID:          "ACP-005",
+			Severity:        "High",
+			Message:         "MCP server is not present in the approved registry",
+			AgentID:         mcpID,
+			Confidence:      0.85,
+			Evidence:        []Evidence{evidence},
+			RemediationHint: "Review the server provenance and add it to the approved registry only after ownership and permission review.",
+		})
+	}
 
 	for identity, agents := range identityAgents {
 		if len(agents) < 2 {
@@ -401,12 +413,12 @@ func Run(root string, options Options) (Report, error) {
 	return report, nil
 }
 
-func inspectFile(path, relative string) (*candidate, error) {
+func inspectFile(path, relative string) ([]candidate, error) {
 	if ignoredSourceFile(relative) {
 		return nil, nil
 	}
-	if candidate, err := inspectJSONMCPMetadata(path, relative); err != nil || candidate != nil {
-		return candidate, err
+	if candidates, err := inspectJSONMCPMetadata(path, relative); err != nil || candidates != nil {
+		return candidates, err
 	}
 	file, err := os.Open(path)
 	if err != nil {
@@ -430,15 +442,9 @@ func inspectFile(path, relative string) (*candidate, error) {
 	firstSignal := 0
 	frameworkSignal := false
 	modelDeclarationSignal := false
-	scannerImplementation := false
 	for scanner.Scan() {
 		lineNumber++
 		line := scanner.Text()
-		if strings.Contains(line, "regexp.MustCompile") {
-			// Do not let the scanner's own detection vocabulary become inventory.
-			scannerImplementation = true
-			continue
-		}
 		if productionCredentialPattern.MatchString(line) {
 			productionCredential = true
 			if credentialLine == 0 {
@@ -554,9 +560,6 @@ func inspectFile(path, relative string) (*candidate, error) {
 	if err := scanner.Err(); err != nil {
 		return nil, err
 	}
-	if scannerImplementation {
-		return nil, nil
-	}
 	if firstSignal == 0 && identity == "" && mcpServer == "" && len(approvedServers) == 0 && len(approvedProviders) == 0 && !runtimeMetadataPath(relative) {
 		return nil, nil
 	}
@@ -575,7 +578,7 @@ func inspectFile(path, relative string) (*candidate, error) {
 	if firstSignal == 0 {
 		firstSignal = 1
 	}
-	return &candidate{
+	return []candidate{{
 		path: relative, line: firstSignal, name: name, kind: kind, models: models, tools: tools,
 		identity: identity, identityLine: identityLine, mcpServer: mcpServer, mcpLine: mcpLine,
 		mcpTransport: mcpTransport, mcpAuthMethod: mcpAuthMethod, mcpTools: mcpTools,
@@ -584,10 +587,10 @@ func inspectFile(path, relative string) (*candidate, error) {
 		modelLine: modelLine, productionCredential: productionCredential, credentialLine: credentialLine,
 		sensitiveTool: sensitiveTool, sensitiveLine: sensitiveLine, approvalMetadata: approvalMetadata,
 		disablePath: disablePath, disableLine: disableLine, verifiedAt: verifiedAt, verifiedLine: verifiedLine,
-	}, nil
+	}}, nil
 }
 
-func inspectJSONMCPMetadata(path, relative string) (*candidate, error) {
+func inspectJSONMCPMetadata(path, relative string) ([]candidate, error) {
 	base := strings.ToLower(filepath.Base(relative))
 	if base != ".mcp.json" && base != "server.json" {
 		return nil, nil
@@ -610,17 +613,21 @@ func inspectJSONMCPMetadata(path, relative string) (*candidate, error) {
 			names = append(names, name)
 		}
 		sort.Strings(names)
-		name := names[0]
-		entry, _ := servers[name].(map[string]any)
-		transport := stringValue(entry["type"])
-		if transport == "" && stringValue(entry["url"]) != "" {
-			transport = "http"
+		candidates := make([]candidate, 0, len(names))
+		for _, name := range names {
+			entry, _ := servers[name].(map[string]any)
+			transport := stringValue(entry["type"])
+			if transport == "" && stringValue(entry["url"]) != "" {
+				transport = "http"
+			}
+			line := lineForValue(data, name)
+			candidates = append(candidates, candidate{
+				path: relative, line: line, name: name, kind: "mcp",
+				mcpServer: name, mcpLine: line, mcpTransport: transport,
+				mcpAuthMethod: jsonAuthMethod(entry),
+			})
 		}
-		return &candidate{
-			path: relative, line: lineForValue(data, name), name: name, kind: "mcp",
-			mcpServer: name, mcpLine: lineForValue(data, name), mcpTransport: transport,
-			mcpAuthMethod: jsonAuthMethod(entry),
-		}, nil
+		return candidates, nil
 	}
 
 	name := stringValue(document["name"])
@@ -643,11 +650,11 @@ func inspectJSONMCPMetadata(path, relative string) (*candidate, error) {
 			transport = stringValue(remote["type"])
 		}
 	}
-	return &candidate{
+	return []candidate{{
 		path: relative, line: lineForValue(data, name), name: name, kind: "mcp",
 		mcpServer: name, mcpLine: lineForValue(data, name), mcpTransport: transport,
 		mcpAuthMethod: jsonManifestAuthMethod(document),
-	}, nil
+	}}, nil
 }
 
 func stringValue(value any) string {
@@ -700,7 +707,7 @@ func supportedFile(path, name string) bool {
 		return true
 	}
 	switch strings.ToLower(filepath.Ext(path)) {
-	case ".go", ".js", ".jsx", ".ts", ".tsx", ".py", ".rb", ".java", ".rs", ".yaml", ".yml", ".json", ".toml":
+	case ".go", ".js", ".jsx", ".ts", ".tsx", ".py", ".rb", ".java", ".rs", ".yaml", ".yml", ".json", ".toml", ".md":
 		return true
 	default:
 		return false
@@ -709,7 +716,7 @@ func supportedFile(path, name string) bool {
 
 func ignoredDirectory(name string) bool {
 	switch name {
-	case ".agentctl", ".claude", ".github", ".git", ".hg", ".svn", ".storybook", "__tests__", "e2e", "test-servers", "node_modules", "vendor", "dist", "build", ".venv", "__pycache__", "examples", "example", "samples", "sample", "demos", "demo", "tutorials", "tutorial", "docs_src", "tests", "test", "testdata", "fixtures", "benchmarks", "docs", "doc", "schemas", "schema":
+	case ".agentctl", ".git", ".hg", ".svn", ".storybook", "__tests__", "e2e", "test-servers", "node_modules", "vendor", "dist", "build", ".venv", "__pycache__", "examples", "example", "samples", "sample", "demos", "demo", "tutorials", "tutorial", "docs_src", "tests", "test", "testdata", "fixtures", "benchmarks", "docs", "doc", "schemas", "schema":
 		return true
 	default:
 		return false
@@ -734,7 +741,7 @@ func runtimeMetadataPath(relative string) bool {
 }
 
 func isLikelyAgentCandidate(relative, name string, nameExplicit, modelDeclarationSignal, frameworkSignal bool, models []string, identity, mcpServer string, environmentExplicit bool) bool {
-	if isLibrarySourcePath(relative) && !environmentExplicit {
+	if isGitHubWorkflowPath(relative) && identity == "" && mcpServer == "" && !environmentExplicit && len(models) == 0 {
 		return false
 	}
 	if nameExplicit && isAgentPath(relative) && isAgentName(name) {
@@ -747,6 +754,16 @@ func isLikelyAgentCandidate(relative, name string, nameExplicit, modelDeclaratio
 		return true
 	}
 	return len(models) > 0 && (modelDeclarationSignal || frameworkSignal)
+}
+
+func isGitHubWorkflowPath(relative string) bool {
+	parts := strings.Split(strings.ToLower(filepath.ToSlash(relative)), "/")
+	for index := 0; index+1 < len(parts); index++ {
+		if parts[index] == ".github" && parts[index+1] == "workflows" {
+			return true
+		}
+	}
+	return false
 }
 
 func staticNameDeclaration(line string) bool {
@@ -767,16 +784,6 @@ func staticNameDeclaration(line string) bool {
 		return staticNameYAMLPattern.MatchString(right)
 	}
 	return staticNamePattern.MatchString(strings.Trim(right, "`\"'"))
-}
-
-func isLibrarySourcePath(relative string) bool {
-	for _, part := range strings.Split(strings.ToLower(filepath.ToSlash(relative)), "/") {
-		switch part {
-		case "lib", "libs", "packages":
-			return true
-		}
-	}
-	return false
 }
 
 func isAgentEntryFile(relative string) bool {
@@ -835,7 +842,11 @@ func declarationValue(line string, pattern *regexp.Regexp) string {
 	if len(parts) != 2 {
 		return "unknown"
 	}
-	value := strings.TrimSpace(strings.Trim(parts[1], "`\"'"))
+	value := strings.TrimSpace(parts[1])
+	value = strings.TrimRight(value, ",;")
+	value = strings.TrimSpace(strings.Trim(value, "`\"'"))
+	value = strings.TrimRight(value, ",;")
+	value = strings.TrimSpace(value)
 	if value == "" || secretPattern.MatchString(value) {
 		return "unknown"
 	}

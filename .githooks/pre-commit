@@ -4,13 +4,23 @@ set -euo pipefail
 ROOT="$(git rev-parse --show-toplevel)"
 REPORT_DIR="${ROOT}/.agentctl/reports"
 REPORT="${REPORT_DIR}/pre-commit.sarif"
+SECRET_GUARD="${ROOT}/.githooks/check_staged_secrets.py"
 
 if [[ "${AGENTCTL_ALLOW_FAILURE:-0}" == "1" ]]; then
-  if [[ "${CI:-}" == "true" || "${CI:-}" == "1" ]]; then
-    echo "AGENTCTL_ALLOW_FAILURE is forbidden in CI" >&2
+  BRANCH="$(git symbolic-ref --quiet --short HEAD || true)"
+  if [[ "${CI:-}" == "true" || "${CI:-}" == "1" || "${GITHUB_ACTIONS:-}" == "true" || "${GITHUB_REF_PROTECTED:-}" == "true" || "$BRANCH" == "main" || "$BRANCH" == "master" ]]; then
+    echo "AGENTCTL_ALLOW_FAILURE is forbidden in CI or protected branches" >&2
     exit 1
   fi
-  echo "WARNING: agentctl pre-commit scan bypassed by AGENTCTL_ALLOW_FAILURE=1" >&2
+  if [[ -z "${AGENTCTL_BYPASS_REASON:-}" ]]; then
+    echo "Set AGENTCTL_BYPASS_REASON to use local bypass" >&2
+    exit 1
+  fi
+  if [[ ! -t 0 && ! -t 1 && ! -t 2 ]]; then
+    echo "AGENTCTL_ALLOW_FAILURE requires an interactive local terminal" >&2
+    exit 1
+  fi
+  echo "WARNING: agentctl pre-commit scan bypassed; reason supplied locally" >&2
   exit 0
 fi
 
@@ -34,24 +44,52 @@ elif ! command -v "$AGENTCTL" >/dev/null 2>&1; then
   exit 1
 fi
 
+if ! AGENTCTL_VERSION="$("$AGENTCTL" version 2>/dev/null)"; then
+  echo "agentctl version check failed" >&2
+  exit 1
+fi
+if [[ "$AGENTCTL_VERSION" != agentctl\ * ]]; then
+  echo "unexpected agentctl version output" >&2
+  exit 1
+fi
+if [[ -n "${AGENTCTL_EXPECTED_VERSION:-}" && "$AGENTCTL_VERSION" != "agentctl ${AGENTCTL_EXPECTED_VERSION}" ]]; then
+  echo "agentctl version does not match AGENTCTL_EXPECTED_VERSION" >&2
+  exit 1
+fi
+
+if [[ ! -f "$SECRET_GUARD" ]]; then
+  echo "staged secret guard is missing: $SECRET_GUARD" >&2
+  exit 1
+fi
+
+python3 "$SECRET_GUARD" --root "$ROOT"
+
+if [[ -f "${ROOT}/.agentctl/config.yaml" ]]; then
+  python3 "$SECRET_GUARD" --root "$ROOT" --check-config "${ROOT}/.agentctl/config.yaml"
+fi
+
+umask 077
 mkdir -p "$REPORT_DIR"
+TMP_REPORT="$(mktemp "${REPORT_DIR}/.pre-commit.XXXXXX.sarif")"
+FINAL_TMP="${REPORT}.tmp.$$"
+trap 'rm -f -- "$TMP_REPORT" "$FINAL_TMP"' EXIT
 cd "$ROOT"
 
 set +e
 "$AGENTCTL" scan "$ROOT" \
   --format sarif \
   --fail-on high \
-  --output "$REPORT"
+  --output "$TMP_REPORT"
 scan_status=$?
 set -e
 
-if [[ ! -s "$REPORT" ]]; then
+if [[ ! -s "$TMP_REPORT" ]]; then
   echo "agentctl did not produce a SARIF report" >&2
   exit 1
 fi
 
 set +e
-python3 - "$REPORT" <<'PY'
+python3 - "$TMP_REPORT" <<'PY'
 import json
 import sys
 
@@ -75,13 +113,19 @@ if violations:
     print("agentctl blocked the commit:", file=sys.stderr)
     for rule, level in violations:
         print(f"  - {rule}: {level}", file=sys.stderr)
-    print(f"Full SARIF report: {path}", file=sys.stderr)
     sys.exit(1)
 
 print("agentctl: no blocking findings")
 PY
 gate_status=$?
 set -e
+
+if [[ ! -s "$TMP_REPORT" ]]; then
+  echo "agentctl did not produce a SARIF report" >&2
+  exit 1
+fi
+install -m 600 "$TMP_REPORT" "$FINAL_TMP"
+mv -f -- "$FINAL_TMP" "$REPORT"
 
 if [[ "$gate_status" -ne 0 ]]; then
   exit "$gate_status"
