@@ -9,6 +9,8 @@ coverage/
 .venv/
 __pycache__/
 *.py[cod]
+.agentctl/bin/
+.agentctl/reports/
 
 # Local project planning, research and preparation artifacts.
 # These files remain available in the workspace but are not published to GitHub.

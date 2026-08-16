@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(git rev-parse --show-toplevel)"
+REPORT_DIR="${ROOT}/.agentctl/reports"
+REPORT="${REPORT_DIR}/pre-commit.sarif"
+
+if [[ "${AGENTCTL_ALLOW_FAILURE:-0}" == "1" ]]; then
+  if [[ "${CI:-}" == "true" || "${CI:-}" == "1" ]]; then
+    echo "AGENTCTL_ALLOW_FAILURE is forbidden in CI" >&2
+    exit 1
+  fi
+  echo "WARNING: agentctl pre-commit scan bypassed by AGENTCTL_ALLOW_FAILURE=1" >&2
+  exit 0
+fi
+
+AGENTCTL="${AGENTCTL_BIN:-}"
+if [[ -z "$AGENTCTL" && -x "${ROOT}/.agentctl/bin/agentctl" ]]; then
+  AGENTCTL="${ROOT}/.agentctl/bin/agentctl"
+fi
+if [[ -z "$AGENTCTL" ]]; then
+  AGENTCTL="agentctl"
+fi
+
+if [[ "$AGENTCTL" == */* ]]; then
+  if [[ ! -x "$AGENTCTL" ]]; then
+    echo "agentctl is not executable: $AGENTCTL" >&2
+    echo "Build .agentctl/bin/agentctl or set AGENTCTL_BIN=/path/to/agentctl" >&2
+    exit 1
+  fi
+elif ! command -v "$AGENTCTL" >/dev/null 2>&1; then
+  echo "agentctl is not installed or is not in PATH" >&2
+  echo "Build .agentctl/bin/agentctl or set AGENTCTL_BIN=/path/to/agentctl" >&2
+  exit 1
+fi
+
+mkdir -p "$REPORT_DIR"
+cd "$ROOT"
+
+set +e
+"$AGENTCTL" scan "$ROOT" \
+  --format sarif \
+  --fail-on high \
+  --output "$REPORT"
+scan_status=$?
+set -e
+
+if [[ ! -s "$REPORT" ]]; then
+  echo "agentctl did not produce a SARIF report" >&2
+  exit 1
+fi
+
+set +e
+python3 - "$REPORT" <<'PY'
+import json
+import sys
+
+path = sys.argv[1]
+try:
+    with open(path, encoding="utf-8") as handle:
+        sarif = json.load(handle)
+except (OSError, json.JSONDecodeError) as error:
+    print(f"agentctl produced an unreadable SARIF report: {error}", file=sys.stderr)
+    sys.exit(1)
+
+blocking = {"error", "critical", "high"}
+violations = []
+for run in sarif.get("runs", []):
+    for result in run.get("results", []):
+        level = str(result.get("level", "warning")).lower()
+        if level in blocking:
+            violations.append((result.get("ruleId", "unknown"), level))
+
+if violations:
+    print("agentctl blocked the commit:", file=sys.stderr)
+    for rule, level in violations:
+        print(f"  - {rule}: {level}", file=sys.stderr)
+    print(f"Full SARIF report: {path}", file=sys.stderr)
+    sys.exit(1)
+
+print("agentctl: no blocking findings")
+PY
+gate_status=$?
+set -e
+
+if [[ "$gate_status" -ne 0 ]]; then
+  exit "$gate_status"
+fi
+if [[ "$scan_status" -ne 0 ]]; then
+  echo "agentctl scan failed without a blocking SARIF finding" >&2
+  exit "$scan_status"
+fi
