@@ -111,8 +111,10 @@ SARIF is available now. Use `--fail-on high` or `--fail-on critical` to make fin
 - run: go run ./cmd/agentctl scan . --format sarif --fail-on high --output agentctl.sarif
 - uses: github/codeql-action/upload-sarif@v4
   with:
-    sarif_file: agentctl.sarif
+  sarif_file: agentctl.sarif
 ```
+
+Pull requests in this repository also run `.github/workflows/agentctl-pr.yml`, which builds the local CLI, uploads SARIF to GitHub Code Scanning, and blocks High/Critical findings through the CLI exit code.
 
 ## Development
 

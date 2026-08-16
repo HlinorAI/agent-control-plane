@@ -1,0 +1,73 @@
+name: Agent Control Plane scan
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+concurrency:
+  group: agentctl-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  agentctl:
+    name: Scan AI agents and MCP metadata
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Build agentctl
+        run: go build -trimpath -o "$RUNNER_TEMP/agentctl" ./cmd/agentctl
+
+      - name: Check workspace policy
+        run: |
+          if [ -f .agentctl/config.yaml ]; then
+            echo "Using existing .agentctl/config.yaml"
+          else
+            echo "No workspace policy found; scanner defaults will be used"
+          fi
+
+      - name: Run Agent Control Plane scan
+        run: |
+          "$RUNNER_TEMP/agentctl" scan . \
+            --format sarif \
+            --fail-on high \
+            --output agentctl.sarif
+
+      - name: Upload SARIF to GitHub Code Scanning
+        if: ${{ always() && hashFiles('agentctl.sarif') != '' }}
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: agentctl.sarif
+          category: agent-control-plane
+
+      - name: Print human-readable report
+        if: ${{ always() }}
+        run: |
+          "$RUNNER_TEMP/agentctl" scan . \
+            --format text \
+            --fail-on none || true
+
+      - name: Upload scan report on failure
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: agentctl-report-${{ github.run_id }}
+          retention-days: 14
+          if-no-files-found: ignore
+          path: agentctl.sarif
