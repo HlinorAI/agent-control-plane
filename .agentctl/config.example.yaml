@@ -1,0 +1,27 @@
+# Copy this file to .agentctl/config.yaml and adapt it to the workspace.
+# This example uses only fields supported by the current alpha scanner.
+
+exclude:
+  - .git
+  - vendor
+  - node_modules
+  - dist
+  - build
+  - coverage
+  - testdata
+  - examples
+  - docs
+
+approved_providers:
+  - openai
+  - anthropic
+  - internal-provider
+  - local-ollama
+  - local-vllm
+
+approved_mcp_servers:
+  - internal-crm
+  - internal-docs
+  - internal-ticketing
+
+freshness_days: 30

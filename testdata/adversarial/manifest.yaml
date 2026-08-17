@@ -6,7 +6,7 @@
       "root": "testdata/demo",
       "expected": {
         "exit_code": 0,
-        "rule_counts": {"ACP-003": 2, "ACP-005": 2, "ACP-006": 1},
+        "rule_counts": {"ACP-003": 2, "ACP-005": 1, "ACP-006": 1},
         "min_agents": 3,
         "min_sources": 6
       },
@@ -15,13 +15,13 @@
     },
     {
       "id": "ADV-REGRESSION-001",
-      "description": "Framework internals and examples are ignored while a declarative registry agent remains visible",
+      "description": "Framework agent entries and examples are separated while a declarative registry agent remains visible",
       "root": "testdata/regression",
       "expected": {
         "exit_code": 0,
         "rule_counts": {},
-        "min_agents": 1,
-        "min_sources": 1
+        "min_agents": 2,
+        "min_sources": 2
       },
       "security_invariants": ["deterministic"],
       "formats": ["json", "sarif"]
