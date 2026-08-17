@@ -16,6 +16,22 @@ go run ./cmd/agentctl scan ./workspace --format json --output report.json
 go run ./cmd/agentctl scan ./workspace --format sarif --fail-on high --output agentctl.sarif
 ```
 
+For incremental CI gates, keep a reviewed JSON report and suppress findings that
+were already accepted in that baseline:
+
+```bash
+go run ./cmd/agentctl scan ./workspace --format json --output baseline.json
+go run ./cmd/agentctl scan ./workspace --format sarif --baseline baseline.json --fail-on high --output agentctl.sarif
+```
+
+The baseline matches stable finding IDs. It does not weaken the scanner rules;
+it only removes findings already present in the supplied report from the current
+output. Review and update the baseline deliberately.
+
+Output paths may be relative or absolute. The parent directory must already
+exist, output directories are rejected, final output symlinks are rejected, and
+reports are written atomically with mode `0600`.
+
 Install from the public module after the repository is released:
 
 ```bash
@@ -101,6 +117,7 @@ The alpha includes ten explainable rules:
 - JSON and SARIF are the stable report formats for the current slice; CSV and issue export are planned.
 
 SARIF is available now. Use `--fail-on high` or `--fail-on critical` to make findings a CI gate; the default `none` keeps scans informational.
+Use `agentctl --help`, `agentctl scan --help`, or `agentctl init --help` for the supported command surface.
 
 ### GitHub Actions example
 
