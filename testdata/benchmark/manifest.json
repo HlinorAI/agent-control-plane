@@ -1,0 +1,53 @@
+{
+  "schema_version": "1",
+  "cases": [
+    {
+      "id": "crewai",
+      "directory": "crewai",
+      "repository": "https://github.com/crewAIInc/crewAI.git",
+      "ref": "9b1f4938f02671d2066e336c8bfdcfb2f27c99ee",
+      "min_agents": 18,
+      "max_agents": 35
+    },
+    {
+      "id": "autogen",
+      "directory": "autogen",
+      "repository": "https://github.com/microsoft/autogen.git",
+      "ref": "027ecf0a379bcc1d09956d46d12d44a3ad9cee14",
+      "min_agents": 15,
+      "max_agents": 30
+    },
+    {
+      "id": "gpt-researcher",
+      "directory": "gpt-researcher",
+      "repository": "https://github.com/assafelovic/gpt-researcher.git",
+      "ref": "5d84d2f5553e70a2765a8ff3a0d2672d60437ce8",
+      "min_agents": 3,
+      "max_agents": 10
+    },
+    {
+      "id": "firecrawl",
+      "directory": "firecrawl",
+      "repository": "https://github.com/firecrawl/firecrawl.git",
+      "ref": "b304eff46e1218dafc1c8423f3b0c9f194ab9fb6",
+      "min_agents": 4,
+      "max_agents": 12
+    },
+    {
+      "id": "open-deep-research",
+      "directory": "open-deep-research",
+      "repository": "https://github.com/langchain-ai/open_deep_research.git",
+      "ref": "1b7d2e80db9faa586165c60e09096dbbfd483a64",
+      "min_agents": 1,
+      "max_agents": 5
+    },
+    {
+      "id": "langchain",
+      "directory": "langchain",
+      "repository": "https://github.com/langchain-ai/langchain.git",
+      "ref": "82fd04260c15a232af0bc9f4983413f0e63fef64",
+      "min_agents": 3,
+      "max_agents": 10
+    }
+  ]
+}

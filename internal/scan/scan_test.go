@@ -210,6 +210,187 @@ func TestRunCollectsAllMCPServersAndAppliesApprovalRule(t *testing.T) {
 	}
 }
 
+func TestRunDoesNotApplyACP005ToSourceCodeMCPReferences(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "agents", "source_agent.py")
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	content := "name: source-agent\nmodel: openai\nmcp_server: internal-tool\n"
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	report, err := Run(root, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(report.MCPServers) != 1 {
+		t.Fatalf("expected source MCP reference in inventory: %+v", report.MCPServers)
+	}
+	for _, finding := range report.Findings {
+		if finding.RuleID == "ACP-005" {
+			t.Fatalf("source-code MCP reference produced ACP-005: %+v", finding)
+		}
+	}
+}
+
+func TestRunRejectsCodeExpressionMetadata(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "crewai", "mcp", "filters.py")
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	content := `from crewai import Agent
+name: str | None = Field(default=None)
+model: Required[str]
+server_name = (item.get("name") or "").removeprefix("models/")
+provider = "Provider name for error messages."
+`
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	report, err := Run(root, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(report.Agents) != 0 || len(report.Findings) != 0 {
+		t.Fatalf("code expressions were inventoried as agent metadata: %+v", report)
+	}
+}
+
+func TestRunKeepsDynamicModelDeclarationSignal(t *testing.T) {
+	root := t.TempDir()
+	files := map[string]string{
+		"deep_researcher.py":                   "model: configurable.research_model\n",
+		"apps/api/src/controllers/v2/agent.ts": "model: req.body.model\n",
+		"agents/_assistant_agent.py":           "name: str\nmodel: openai\n",
+		"agents/anthropic_agent.py":            "name: chunk.content_block.name\nmodel: claude\n",
+		"agents/openai_agent.py":               "name: str | None = Field(default=None)\nmodel: openai\n",
+		"agents/provider_agent.py":             "name: Provider name for error messages.\nmodel: openai\n",
+	}
+	for relative, content := range files {
+		path := filepath.Join(root, relative)
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	report, err := Run(root, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(report.Agents) != len(files) {
+		t.Fatalf("dynamic model declarations or explicit agent files were not preserved: %+v", report.Agents)
+	}
+	for _, agent := range report.Agents {
+		if len(agent.Models) == 0 && agent.SourcePath == "deep_researcher.py" {
+			continue
+		}
+		if agent.SourcePath == "apps/api/src/controllers/v2/agent.ts" && len(agent.Models) == 0 {
+			continue
+		}
+		if agent.Name == "str" || agent.Name == "chunk.content_block.name" || agent.Name == "Provider name for error messages." {
+			t.Fatalf("code expression was emitted as agent name: %+v", agent)
+		}
+	}
+}
+
+func TestRunIgnoresItsOwnJSONReport(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "agents", "billing.yaml")
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("name: billing-agent\nmodel: openai\nidentity: svc-crm\nowner: payments-team\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	first, err := Run(root, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := json.Marshal(first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "report.json"), data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	second, err := Run(root, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(second.Agents) != 1 || len(second.Findings) != 0 {
+		t.Fatalf("agentctl report was inventoried: agents=%+v findings=%+v", second.Agents, second.Findings)
+	}
+}
+
+func TestRunKeepsOwnerValuesWithParentheses(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "agents", "owner_agent.py")
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	content := "name: owner-agent\nmodel: openai\nowner: payments-team (oncall)\n"
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	report, err := Run(root, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(report.Agents) != 1 || report.Agents[0].Owner != "payments-team (oncall)" {
+		t.Fatalf("owner value was filtered: %+v", report.Agents)
+	}
+	for _, finding := range report.Findings {
+		if finding.RuleID == "ACP-001" {
+			t.Fatalf("owner value produced ACP-001: %+v", finding)
+		}
+	}
+}
+
+func TestRunDoesNotCombineDistantPermissionSignals(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "agents", "mixed_agent.py")
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	content := `name: mixed-agent
+model: openai
+read_only: true
+
+
+
+
+
+
+
+
+
+permissions: ["write"]
+`
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	report, err := Run(root, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, finding := range report.Findings {
+		if finding.RuleID == "ACP-004" {
+			t.Fatalf("distant permission signals produced ACP-004: %+v", finding)
+		}
+	}
+}
+
+func TestLineForValueUsesByteIndexAndLineCount(t *testing.T) {
+	data := []byte("first\nsecond\nneedle\n")
+	if line := lineForValue(data, "needle"); line != 3 {
+		t.Fatalf("expected line 3, got %d", line)
+	}
+}
+
 func TestRunDiscoversAgentMarkdownUnderToolingDirectories(t *testing.T) {
 	root := t.TempDir()
 	files := map[string]string{
@@ -250,6 +431,30 @@ func TestRunDoesNotInventoryGenericGitHubWorkflow(t *testing.T) {
 	}
 	if len(report.Agents) != 0 || len(report.Findings) != 0 {
 		t.Fatalf("generic GitHub workflow was inventoried as an agent: %+v", report)
+	}
+}
+
+func TestRunIgnoresWorkflowJobNamesAndDependabotConfig(t *testing.T) {
+	root := t.TempDir()
+	files := map[string]string{
+		".github/workflows/claude-sync.yml": "name: 🔄 Check CLAUDE.md / AGENTS.md Sync\njobs:\n  sync:\n    runs-on: ubuntu-latest\n    env:\n      model: claude\n",
+		".github/dependabot.yml":            "version: 2\nupdates:\n  - package-ecosystem: pip\n    directory: /\n    schedule:\n      interval: weekly\n    labels: [bot, openai, anthropic, ollama]\n",
+	}
+	for relative, content := range files {
+		path := filepath.Join(root, relative)
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	report, err := Run(root, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(report.Agents) != 0 || len(report.Findings) != 0 {
+		t.Fatalf("workflow or Dependabot metadata was inventoried as an agent: %+v", report)
 	}
 }
 
@@ -364,7 +569,7 @@ func TestRunDemoFixtureFindsRiskRulesAndCanonicalRelationships(t *testing.T) {
 			t.Fatalf("demo fixture did not produce %s; findings=%+v", ruleID, report.Findings)
 		}
 	}
-	if len(report.Agents) != 3 || len(report.Sources) != 6 || len(report.Models) != 3 {
+	if len(report.Agents) != 3 || len(report.Sources) != 7 || len(report.Models) != 3 {
 		t.Fatalf("unexpected canonical inventory sizes: agents=%d sources=%d models=%d", len(report.Agents), len(report.Sources), len(report.Models))
 	}
 	if len(report.Identities) != 2 || report.Identities[0].Name != "shared-crm-role" && report.Identities[1].Name != "shared-crm-role" {
