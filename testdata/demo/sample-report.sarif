@@ -84,6 +84,30 @@
       },
       "results": [
         {
+          "ruleId": "ACP-002",
+          "level": "error",
+          "message": {
+            "text": "Runtime agent has no matching source inventory entry"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "runtime/agents.json"
+                },
+                "region": {
+                  "startLine": 2
+                }
+              }
+            }
+          ],
+          "properties": {
+            "agent_id": "runtime-agent_3c7012a6208aa5da",
+            "confidence": 0.75,
+            "remediation_hint": "Confirm the source repository and owner, or register this runtime agent explicitly."
+          }
+        },
+        {
           "ruleId": "ACP-007",
           "level": "error",
           "message": {
@@ -133,7 +157,7 @@
         },
         {
           "ruleId": "ACP-001",
-          "level": "warning",
+          "level": "note",
           "message": {
             "text": "Potential owner gap: no owner/team declaration found in the scanned source"
           },
@@ -177,30 +201,6 @@
             "agent_id": "agent_e71d63d2acc2b959",
             "confidence": 0.86,
             "remediation_hint": "Use an approved provider or update the workspace policy through an explicit review."
-          }
-        },
-        {
-          "ruleId": "ACP-005",
-          "level": "error",
-          "message": {
-            "text": "MCP server is not present in the approved registry"
-          },
-          "locations": [
-            {
-              "physicalLocation": {
-                "artifactLocation": {
-                  "uri": "agents/billing_agent.py"
-                },
-                "region": {
-                  "startLine": 5
-                }
-              }
-            }
-          ],
-          "properties": {
-            "agent_id": "agent_d4c7feb8ccf186dd",
-            "confidence": 0.85,
-            "remediation_hint": "Review the server provenance and add it to the approved registry only after ownership and permission review."
           }
         },
         {
@@ -273,30 +273,6 @@
             "agent_id": "agent_57603bf821776970",
             "confidence": 0.7,
             "remediation_hint": "Use a dedicated least-privilege identity or document an approved shared-identity exception."
-          }
-        },
-        {
-          "ruleId": "ACP-002",
-          "level": "error",
-          "message": {
-            "text": "Runtime agent has no matching source inventory entry"
-          },
-          "locations": [
-            {
-              "physicalLocation": {
-                "artifactLocation": {
-                  "uri": "runtime/agents.json"
-                },
-                "region": {
-                  "startLine": 2
-                }
-              }
-            }
-          ],
-          "properties": {
-            "agent_id": "runtime-agent_729109f2b322ef45",
-            "confidence": 0.75,
-            "remediation_hint": "Confirm the source repository and owner, or register this runtime agent explicitly."
           }
         },
         {
@@ -396,30 +372,6 @@
           }
         },
         {
-          "ruleId": "ACP-005",
-          "level": "error",
-          "message": {
-            "text": "MCP server is not present in the approved registry"
-          },
-          "locations": [
-            {
-              "physicalLocation": {
-                "artifactLocation": {
-                  "uri": "agents/crm_agent.py"
-                },
-                "region": {
-                  "startLine": 6
-                }
-              }
-            }
-          ],
-          "properties": {
-            "agent_id": "agent_57603bf821776970",
-            "confidence": 0.85,
-            "remediation_hint": "Review the server provenance and add it to the approved registry only after ownership and permission review."
-          }
-        },
-        {
           "ruleId": "ACP-001",
           "level": "error",
           "message": {
@@ -441,6 +393,30 @@
             "agent_id": "agent_d4c7feb8ccf186dd",
             "confidence": 0.55,
             "remediation_hint": "Confirm an accountable owner or team and record the ownership source."
+          }
+        },
+        {
+          "ruleId": "ACP-005",
+          "level": "error",
+          "message": {
+            "text": "MCP server is not present in the approved registry"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": ".mcp.json"
+                },
+                "region": {
+                  "startLine": 3
+                }
+              }
+            }
+          ],
+          "properties": {
+            "agent_id": "mcp_b02885c87b9ae982",
+            "confidence": 0.85,
+            "remediation_hint": "Review the server provenance and add it to the approved registry only after ownership and permission review."
           }
         }
       ]

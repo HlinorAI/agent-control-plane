@@ -65,6 +65,20 @@ The runtime fuzz targets are standalone safe parser seams. They classify in-memo
 
 `fuzzpayloadcheck` runs in strict mode by default. The `-allow-adversarial` option is only for the committed negative-case corpus: it permits expected malformed, duplicate-key, unsafe-URL, control-character, and inert command fixtures while keeping credential-like values, invalid UTF-8, resource-limit violations, unsafe paths, and filesystem errors blocking.
 
+Run the pinned external-repository precision benchmark locally after cloning the
+repositories listed in `testdata/benchmark/manifest.json`:
+
+```bash
+go run ./cmd/agentctl-benchmark --root /path/to/benchmark-root
+```
+
+The benchmark is a regression gate for candidate count, non-policy ACP-005
+findings and code-like metadata values. It reports only aggregate counts; it
+does not print source values. The weekly and manually triggered workflow
+`.github/workflows/external-benchmark.yml` checks out the exact manifest refs
+before running the gate. Thresholds are reviewed baselines, not a claim of
+ground-truth precision or recall.
+
 ## What it does
 
 The CLI scans an approved local directory in read-only mode and produces text or JSON inventory containing:
@@ -77,6 +91,11 @@ The CLI scans an approved local directory in read-only mode and produces text or
 - deterministic risk findings with file/line evidence;
 - SARIF 2.1.0 output for GitHub Code Scanning and other security tooling;
 - safe `.mcp.json` and `server.json` metadata such as server name, transport and auth method.
+
+ACP-005 is emitted only for MCP policy sources such as `.mcp.json`,
+`server.json`, and explicitly named MCP/server/manifest JSON or YAML files.
+Source-code references to an MCP server are inventory evidence but do not create
+a policy finding by themselves.
 
 The default policy excludes common non-production paths such as tests, examples, samples, tutorials, fixtures, documentation and schemas. Agent definitions under tooling directories such as `.claude` and `.github`, Markdown agent files, and framework library layouts remain scannable when they contain strong agent signals. Use `.agentctl/config.yaml` to add workspace-specific exclusions and approved providers or MCP servers. `agentctl init` never overwrites an existing policy.
 

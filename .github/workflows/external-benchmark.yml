@@ -1,0 +1,44 @@
+name: External repository precision benchmark
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 3 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out scanner
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Prepare pinned upstream repositories
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/agent-control-plane-benchmark"
+          mkdir -p "$root"
+          jq -r '.cases[] | [.directory, .repository, .ref] | @tsv' testdata/benchmark/manifest.json |
+            while IFS=$'\t' read -r directory repository ref; do
+              mkdir -p "$root/$directory"
+              git -C "$root/$directory" init -q
+              git -C "$root/$directory" remote add origin "$repository"
+              git -C "$root/$directory" -c protocol.version=2 fetch --filter=blob:none --depth 1 origin "$ref"
+              git -C "$root/$directory" checkout --detach FETCH_HEAD
+              actual=$(git -C "$root/$directory" rev-parse HEAD)
+              test "$actual" = "$ref"
+            done
+          echo "BENCHMARK_ROOT=$root" >> "$GITHUB_ENV"
+
+      - name: Run precision benchmark
+        run: go run ./cmd/agentctl-benchmark --root "$BENCHMARK_ROOT"

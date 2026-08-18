@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "unknown-crm": {
+      "type": "http",
+      "url": "https://example.test/mcp"
+    }
+  }
+}

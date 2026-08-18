@@ -2,6 +2,7 @@ package scan
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
@@ -50,6 +51,9 @@ var (
 	authMethodPattern           = regexp.MustCompile(`(?im)^\s*["']?(auth[_ -]?method|authentication)["']?\s*[:=]`)
 	staticNamePattern           = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,80}$`)
 	staticNameYAMLPattern       = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9 ._-]{0,80}$`)
+	staticModelPattern          = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:/@-]{0,120}$`)
+	codeExpressionPattern       = regexp.MustCompile(`(?i)\b(getmodel|select_choice|removeprefix|field)\s*\(|\brequired\s*\[|schema\s*\[`)
+	dottedIdentifierPattern     = regexp.MustCompile(`^[a-z_][a-z0-9_]*(?:\.[a-z_][a-z0-9_]*)+$`)
 )
 
 type candidate struct {
@@ -150,6 +154,10 @@ func Run(root string, options Options) (Report, error) {
 		}
 		rel, err := filepath.Rel(absRoot, path)
 		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			report.FilesSkipped++
+			return nil
+		}
+		if isAgentctlReport(path, filepath.ToSlash(rel)) {
 			report.FilesSkipped++
 			return nil
 		}
@@ -374,7 +382,7 @@ func Run(root string, options Options) (Report, error) {
 		}
 	}
 	for _, server := range report.MCPServers {
-		if server.Approved {
+		if server.Approved || !isMCPPolicySource(server.SourcePath) {
 			continue
 		}
 		evidence := mcpEvidence[strings.ToLower(server.Name)]
@@ -434,9 +442,10 @@ func inspectFile(path, relative string) ([]candidate, error) {
 	environmentExplicit := false
 	nameExplicit := false
 	var mcpTransport, mcpAuthMethod, verifiedAt string
-	identityLine, mcpLine, permissionLine := 0, 0, 0
+	identityLine, mcpLine := 0, 0
 	modelLine, credentialLine, sensitiveLine, disableLine, verifiedLine := 0, 0, 0, 0, 0
-	readOnly, writeScope := false, false
+	readOnly := false
+	readOnlyLine, writeScopeLine := 0, 0
 	productionCredential, sensitiveTool, approvalMetadata, disablePath := false, false, false, false
 	approvedServers, approvedProviders, mcpTools := []string{}, []string{}, []string{}
 	firstSignal := 0
@@ -474,20 +483,29 @@ func inspectFile(path, relative string) ([]candidate, error) {
 			// Never copy or emit the line. The scanner only retains safe metadata.
 			continue
 		}
-		if name == "" && declarationMatch(line, namePattern) {
-			name = declarationValue(line, namePattern)
+		if name == "" && !isGitHubWorkflowPath(relative) && declarationMatch(line, namePattern) {
+			value := declarationValue(line, namePattern)
+			if value != "unknown" {
+				name = value
+			}
 			nameExplicit = name != "" && name != "unknown" && staticNameDeclaration(line)
 			if firstSignal == 0 && nameExplicit && isAgentPath(relative) && isAgentName(name) {
 				firstSignal = lineNumber
 			}
 		}
 		if identity == "" && declarationMatch(line, identityPattern) {
-			identity = declarationValue(line, identityPattern)
-			identityLine = lineNumber
+			value := declarationValue(line, identityPattern)
+			if value != "unknown" {
+				identity = value
+				identityLine = lineNumber
+			}
 		}
 		if mcpServer == "" && declarationMatch(line, mcpPattern) {
-			mcpServer = declarationValue(line, mcpPattern)
-			mcpLine = lineNumber
+			value := declarationValue(line, mcpPattern)
+			if value != "unknown" {
+				mcpServer = value
+				mcpLine = lineNumber
+			}
 		}
 		if mcpServer != "" && mcpTransport == "" && declarationMatch(line, transportPattern) {
 			mcpTransport = declarationValue(line, transportPattern)
@@ -497,10 +515,14 @@ func inspectFile(path, relative string) ([]candidate, error) {
 		}
 		if readOnlyPattern.MatchString(line) {
 			readOnly = true
+			if readOnlyLine == 0 {
+				readOnlyLine = lineNumber
+			}
 		}
 		if writePattern.MatchString(line) && (declarationMatch(line, toolPattern) || declarationMatch(line, permissionDeclaration)) {
-			writeScope = true
-			permissionLine = lineNumber
+			if writeScopeLine == 0 {
+				writeScopeLine = lineNumber
+			}
 		}
 		if strings.Contains(strings.ToLower(relative), "approved") && strings.Contains(strings.ToLower(relative), "mcp") {
 			if match := listItemPattern.FindStringSubmatch(line); len(match) == 2 {
@@ -515,18 +537,20 @@ func inspectFile(path, relative string) ([]candidate, error) {
 		if mcpServer != "" && declarationMatch(line, toolPattern) {
 			mcpTools = appendUnique(mcpTools, toolLabel(line))
 		}
-		if firstSignal == 0 && (frameworkPattern.MatchString(line) || modelPattern.MatchString(line) || declarationMatch(line, modelDeclaration) || declarationMatch(line, toolPattern) || sensitiveTool) {
+		if firstSignal == 0 && (frameworkPattern.MatchString(line) || isModelReferenceLine(line) || declarationMatch(line, modelDeclaration) || declarationMatch(line, toolPattern) || sensitiveTool) {
 			firstSignal = lineNumber
 		}
 		if declarationMatch(line, modelDeclaration) {
-			modelDeclarationSignal = true
 			if value := declarationValue(line, modelDeclaration); value != "" && value != "unknown" {
-				models = appendUnique(models, value)
-				if modelLine == 0 {
-					modelLine = lineNumber
+				modelDeclarationSignal = true
+				if staticModelValue(value) {
+					models = appendUnique(models, value)
+					if modelLine == 0 {
+						modelLine = lineNumber
+					}
 				}
 			}
-		} else if modelPattern.MatchString(line) {
+		} else if isModelReferenceLine(line) {
 			models = appendUnique(models, modelLabel(line))
 			if modelLine == 0 {
 				modelLine = lineNumber
@@ -539,18 +563,24 @@ func inspectFile(path, relative string) ([]candidate, error) {
 			tools = appendUnique(tools, toolLabel(line))
 		}
 		if owner == "" && declarationMatch(line, ownerPattern) {
-			owner = declarationValue(line, ownerPattern)
+			value := declarationValue(line, ownerPattern)
+			if value != "unknown" {
+				owner = value
+			}
 		}
 		if environment == "" && declarationMatch(line, environmentPattern) {
-			environmentExplicit = true
-			value := strings.ToLower(declarationValue(line, environmentPattern))
-			switch value {
-			case "prod":
-				environment = "production"
-			case "dev":
-				environment = "development"
-			default:
-				environment = value
+			value := declarationValue(line, environmentPattern)
+			if value != "unknown" {
+				environmentExplicit = true
+				value = strings.ToLower(value)
+				switch value {
+				case "prod":
+					environment = "production"
+				case "dev":
+					environment = "development"
+				default:
+					environment = value
+				}
 			}
 		}
 		if environment == "" && productionComment.MatchString(line) {
@@ -582,8 +612,8 @@ func inspectFile(path, relative string) ([]candidate, error) {
 		path: relative, line: firstSignal, name: name, kind: kind, models: models, tools: tools,
 		identity: identity, identityLine: identityLine, mcpServer: mcpServer, mcpLine: mcpLine,
 		mcpTransport: mcpTransport, mcpAuthMethod: mcpAuthMethod, mcpTools: mcpTools,
-		owner: owner, environment: environment, environmentExplicit: environmentExplicit, nameExplicit: nameExplicit, readOnly: readOnly, writeScope: writeScope,
-		permissionLine: permissionLine, approvedServers: approvedServers, approvedProviders: approvedProviders,
+		owner: owner, environment: environment, environmentExplicit: environmentExplicit, nameExplicit: nameExplicit, readOnly: readOnly, writeScope: permissionScope(readOnlyLine, writeScopeLine),
+		permissionLine: writeScopeLine, approvedServers: approvedServers, approvedProviders: approvedProviders,
 		modelLine: modelLine, productionCredential: productionCredential, credentialLine: credentialLine,
 		sensitiveTool: sensitiveTool, sensitiveLine: sensitiveLine, approvalMetadata: approvalMetadata,
 		disablePath: disablePath, disableLine: disableLine, verifiedAt: verifiedAt, verifiedLine: verifiedLine,
@@ -688,18 +718,38 @@ func lineForValue(data []byte, value string) int {
 		return 1
 	}
 	needle := []byte(value)
-	for index := 0; index+len(needle) <= len(data); index++ {
-		if string(data[index:index+len(needle)]) == value {
-			line := 1
-			for _, current := range data[:index] {
-				if current == '\n' {
-					line++
-				}
-			}
-			return line
-		}
+	index := bytes.Index(data, needle)
+	if index >= 0 {
+		return 1 + bytes.Count(data[:index], []byte{'\n'})
 	}
 	return 1
+}
+
+func isMCPPolicySource(relative string) bool {
+	base := strings.ToLower(filepath.Base(relative))
+	if base == ".mcp.json" || base == "server.json" {
+		return true
+	}
+	extension := strings.ToLower(filepath.Ext(base))
+	if extension != ".json" && extension != ".yaml" && extension != ".yml" {
+		return false
+	}
+	return strings.Contains(base, "mcp") || strings.Contains(base, "server") || strings.Contains(base, "manifest")
+}
+
+func permissionScope(readOnlyLine, writeScopeLine int) bool {
+	if readOnlyLine == 0 || writeScopeLine == 0 {
+		return false
+	}
+	distance := readOnlyLine - writeScopeLine
+	if distance < 0 {
+		distance = -distance
+	}
+	return distance <= 8
+}
+
+func isModelReferenceLine(line string) bool {
+	return modelPattern.MatchString(line) && !codeExpressionPattern.MatchString(line)
 }
 
 func supportedFile(path, name string) bool {
@@ -725,7 +775,26 @@ func ignoredDirectory(name string) bool {
 
 func ignoredSourceFile(relative string) bool {
 	base := strings.ToLower(filepath.Base(relative))
-	return strings.HasSuffix(base, "_test.go") || strings.Contains(base, ".test.") || strings.Contains(base, ".spec.") || strings.Contains(base, ".stories.")
+	return base == "dependabot.yml" || base == "dependabot.yaml" || strings.HasSuffix(base, "_test.go") || strings.Contains(base, ".test.") || strings.Contains(base, ".spec.") || strings.Contains(base, ".stories.")
+}
+
+func isAgentctlReport(path, relative string) bool {
+	if strings.ToLower(filepath.Ext(relative)) != ".json" || filepath.Dir(relative) != "." {
+		return false
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	var header struct {
+		SchemaVersion string `json:"schema_version"`
+		ReadOnly      *bool  `json:"read_only"`
+		MetadataOnly  *bool  `json:"metadata_only"`
+	}
+	if err := json.Unmarshal(data, &header); err != nil {
+		return false
+	}
+	return header.SchemaVersion == schemaVersion && header.ReadOnly != nil && header.MetadataOnly != nil
 }
 
 func runtimeMetadataPath(relative string) bool {
@@ -741,8 +810,12 @@ func runtimeMetadataPath(relative string) bool {
 }
 
 func isLikelyAgentCandidate(relative, name string, nameExplicit, modelDeclarationSignal, frameworkSignal bool, models []string, identity, mcpServer string, environmentExplicit bool) bool {
-	if isGitHubWorkflowPath(relative) && identity == "" && mcpServer == "" && !environmentExplicit && len(models) == 0 {
+	if isGitHubWorkflowPath(relative) {
 		return false
+	}
+	extension := strings.ToLower(filepath.Ext(relative))
+	if extension == ".md" || extension == ".json" {
+		return nameExplicit && (isAgentName(name) || isAgentMetadataPath(relative))
 	}
 	if nameExplicit && isAgentPath(relative) && isAgentName(name) {
 		return true
@@ -753,7 +826,28 @@ func isLikelyAgentCandidate(relative, name string, nameExplicit, modelDeclaratio
 	if identity != "" || mcpServer != "" || environmentExplicit {
 		return true
 	}
-	return len(models) > 0 && (modelDeclarationSignal || frameworkSignal)
+	if modelDeclarationSignal {
+		return hasAgentFileMarker(relative) || (nameExplicit && isAgentName(name))
+	}
+	if len(models) == 0 {
+		return false
+	}
+	return frameworkSignal && hasAgentFileMarker(relative)
+}
+
+func isAgentMetadataPath(relative string) bool {
+	path := strings.ToLower(filepath.ToSlash(relative))
+	return strings.HasPrefix(path, "agents/") || strings.HasPrefix(path, ".claude/agents/") || strings.HasPrefix(path, ".github/agents/") || strings.Contains(path, "/.claude/agents/") || strings.Contains(path, "/.github/agents/") || strings.Contains(path, "/agents/")
+}
+
+func hasAgentFileMarker(relative string) bool {
+	base := strings.TrimSuffix(strings.ToLower(filepath.Base(relative)), filepath.Ext(relative))
+	for _, marker := range []string{"agent", "assistant", "copilot", "chatbot", "bot", "worker", "runner", "researcher"} {
+		if strings.Contains(base, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 func isGitHubWorkflowPath(relative string) bool {
@@ -788,7 +882,7 @@ func staticNameDeclaration(line string) bool {
 
 func isAgentEntryFile(relative string) bool {
 	base := strings.TrimSuffix(strings.ToLower(filepath.Base(relative)), filepath.Ext(relative))
-	for _, marker := range []string{"agent", "assistant", "copilot", "chatbot", "bot", "worker", "runner"} {
+	for _, marker := range []string{"agent", "assistant", "copilot", "chatbot", "bot", "worker", "runner", "researcher"} {
 		if strings.Contains(base, marker) {
 			return true
 		}
@@ -813,7 +907,7 @@ func isAgentName(name string) bool {
 
 func isAgentPath(relative string) bool {
 	for _, part := range strings.Split(strings.ToLower(filepath.ToSlash(relative)), "/") {
-		for _, marker := range []string{"agent", "assistant", "copilot", "chatbot", "bot", "crew", "autogen", "langgraph"} {
+		for _, marker := range []string{"agent", "assistant", "copilot", "chatbot", "bot", "crew", "autogen", "langgraph", "researcher"} {
 			if strings.Contains(part, marker) {
 				return true
 			}
@@ -850,7 +944,63 @@ func declarationValue(line string, pattern *regexp.Regexp) string {
 	if value == "" || secretPattern.MatchString(value) {
 		return "unknown"
 	}
+	if pattern == namePattern && !staticNameValue(line, value) {
+		return "unknown"
+	}
+	if pattern == mcpPattern && codeExpressionPattern.MatchString(value) {
+		return "unknown"
+	}
 	return value
+}
+
+func staticNameValue(line, value string) bool {
+	if !staticDeclarationValue(line, value) || strings.HasSuffix(strings.TrimSpace(value), ".") {
+		return false
+	}
+	if dottedIdentifierPattern.MatchString(strings.ToLower(value)) {
+		return false
+	}
+	switch strings.ToLower(value) {
+	case "str", "model", "name", "bool", "int", "model_name":
+		return false
+	}
+	upper := strings.ToUpper(value)
+	if value == upper && (strings.HasSuffix(upper, "_API_KEY") || strings.HasSuffix(upper, "_TOKEN") || strings.HasSuffix(upper, "_SECRET") || strings.HasSuffix(upper, "_CREDENTIAL")) {
+		return false
+	}
+	return true
+}
+
+func staticDeclarationValue(line, value string) bool {
+	if value == "" || len(value) > 160 || strings.ContainsAny(value, "()[]{}|=<>") {
+		return false
+	}
+	trimmed := strings.TrimSpace(line)
+	separator := ":"
+	if !strings.Contains(trimmed, ":") {
+		separator = "="
+	}
+	parts := strings.SplitN(trimmed, separator, 2)
+	if len(parts) != 2 {
+		return false
+	}
+	right := strings.TrimSpace(parts[1])
+	if len(right) >= 2 && strings.ContainsRune("`\"'", rune(right[0])) {
+		return true
+	}
+	return separator == ":" && (staticNameYAMLPattern.MatchString(value) || staticModelPattern.MatchString(value))
+}
+
+func staticModelValue(value string) bool {
+	if !staticModelPattern.MatchString(value) || codeExpressionPattern.MatchString(value) || dottedIdentifierPattern.MatchString(strings.ToLower(value)) {
+		return false
+	}
+	switch strings.ToLower(value) {
+	case "str", "model", "name", "bool", "int", "model_name":
+		return false
+	default:
+		return true
+	}
 }
 
 func declarationMatch(line string, pattern *regexp.Regexp) bool {
