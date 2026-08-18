@@ -38,6 +38,9 @@ jobs:
       - name: Build CLI
         run: go build ./cmd/agentctl
 
+      - name: Build all packages
+        run: go build ./...
+
       - name: Scan repository
         run: go run ./cmd/agentctl scan . --format sarif --fail-on high --output agentctl.sarif
 

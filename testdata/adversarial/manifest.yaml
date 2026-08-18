@@ -10,7 +10,7 @@
         "min_agents": 3,
         "min_sources": 6
       },
-      "security_invariants": ["deterministic"],
+      "security_invariants": ["deterministic", "no_filesystem_mutation", "safe_evidence", "severity_integrity"],
       "formats": ["json", "sarif", "text"]
     },
     {
@@ -23,7 +23,7 @@
         "min_agents": 2,
         "min_sources": 2
       },
-      "security_invariants": ["deterministic"],
+      "security_invariants": ["deterministic", "no_filesystem_mutation", "safe_evidence", "severity_integrity"],
       "formats": ["json", "sarif"]
     },
     {
@@ -37,7 +37,7 @@
         "min_sources": 1
       },
       "secrets": ["prod-api-token-SYNTHETIC-NOT-REAL"],
-      "security_invariants": ["no_secret_leak", "no_marker_created", "deterministic"],
+      "security_invariants": ["no_secret_leak", "no_marker_created", "deterministic", "no_filesystem_mutation", "safe_evidence", "severity_integrity"],
       "formats": ["json", "sarif", "text"]
     }
   ]

@@ -63,6 +63,10 @@ func TestAdversarialCorpus(t *testing.T) {
 			if tc.Description == "" || tc.Root == "" || len(tc.Formats) == 0 {
 				t.Fatal("case requires description, root, and at least one format")
 			}
+			assertManifestInvariantCoverage(t, tc.SecurityInvariants)
+			if err := validateSecretInvariant(tc.SecurityInvariants, tc.Secrets); err != nil {
+				t.Fatal(err)
+			}
 			if tc.Expected.ExitCode != 0 {
 				t.Fatalf("package-level harness only supports expected exit code 0, got %d", tc.Expected.ExitCode)
 			}
@@ -85,6 +89,9 @@ func TestAdversarialCorpus(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
+					if !containsInvariant(tc.SecurityInvariants, "deterministic") {
+						return
+					}
 					for i := 0; i < 2; i++ {
 						repeated, err := runAndAssert(t, fixtureRoot, tc, format)
 						if err != nil {
@@ -102,9 +109,25 @@ func TestAdversarialCorpus(t *testing.T) {
 
 func runAndAssert(t *testing.T, root string, tc testCase, format string) ([]byte, error) {
 	t.Helper()
+	var before treeSnapshot
+	var err error
+	if containsInvariant(tc.SecurityInvariants, "no_filesystem_mutation") {
+		before, err = snapshotTree(root)
+		if err != nil {
+			return nil, fmt.Errorf("snapshot fixture before scan: %w", err)
+		}
+	}
 	report, err := scan.Run(root, scan.Options{})
 	if err != nil {
 		return nil, err
+	}
+	assertReportInvariants(t, report, tc.SecurityInvariants)
+	if containsInvariant(tc.SecurityInvariants, "no_filesystem_mutation") {
+		after, err := snapshotTree(root)
+		if err != nil {
+			return nil, fmt.Errorf("snapshot fixture after scan: %w", err)
+		}
+		assertTreeUnchanged(t, before, after)
 	}
 	if len(report.Agents) < tc.Expected.MinAgents {
 		return nil, fmt.Errorf("case %s: expected at least %d agents, got %d", tc.ID, tc.Expected.MinAgents, len(report.Agents))
@@ -136,9 +159,11 @@ func runAndAssert(t *testing.T, root string, tc testCase, format string) ([]byte
 	if err != nil {
 		return nil, fmt.Errorf("render %s: %w", format, err)
 	}
-	for _, secret := range tc.Secrets {
-		if bytes.Contains(output, []byte(secret)) {
-			return nil, fmt.Errorf("case %s leaked synthetic secret in %s output", tc.ID, format)
+	if containsInvariant(tc.SecurityInvariants, "no_secret_leak") {
+		for _, secret := range tc.Secrets {
+			if bytes.Contains(output, []byte(secret)) {
+				return nil, fmt.Errorf("case %s leaked synthetic secret in %s output", tc.ID, format)
+			}
 		}
 	}
 	if containsInvariant(tc.SecurityInvariants, "no_marker_created") {
