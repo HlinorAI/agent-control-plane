@@ -36,11 +36,17 @@ type sarifRule struct {
 }
 
 type sarifResult struct {
-	RuleID     string          `json:"ruleId"`
-	Level      string          `json:"level"`
-	Message    sarifMessage    `json:"message"`
-	Locations  []sarifLocation `json:"locations,omitempty"`
-	Properties map[string]any  `json:"properties,omitempty"`
+	RuleID       string             `json:"ruleId"`
+	Level        string             `json:"level"`
+	Message      sarifMessage       `json:"message"`
+	Locations    []sarifLocation    `json:"locations,omitempty"`
+	Properties   map[string]any     `json:"properties,omitempty"`
+	Suppressions []sarifSuppression `json:"suppressions,omitempty"`
+}
+
+type sarifSuppression struct {
+	Kind          string `json:"kind"`
+	Justification string `json:"justification,omitempty"`
 }
 
 type sarifMessage struct {
@@ -95,17 +101,23 @@ func (r Report) SARIF() ([]byte, error) {
 				Region:           sarifRegion{StartLine: line},
 			}})
 		}
-		results = append(results, sarifResult{
-			RuleID:    finding.RuleID,
-			Level:     sarifLevel(finding.Severity),
-			Message:   sarifMessage{Text: finding.Message},
-			Locations: locations,
-			Properties: map[string]any{
-				"agent_id":         finding.AgentID,
-				"confidence":       finding.Confidence,
-				"remediation_hint": finding.RemediationHint,
-			},
-		})
+		properties := map[string]any{
+			"agent_id":         finding.AgentID,
+			"confidence":       finding.Confidence,
+			"remediation_hint": finding.RemediationHint,
+		}
+		result := sarifResult{
+			RuleID:     finding.RuleID,
+			Level:      sarifLevel(finding.Severity),
+			Message:    sarifMessage{Text: finding.Message},
+			Locations:  locations,
+			Properties: properties,
+		}
+		if finding.Suppressed {
+			result.Suppressions = []sarifSuppression{{Kind: "external", Justification: finding.SuppressionReason}}
+			properties["suppression_expires_at"] = finding.SuppressionExpiresAt
+		}
+		results = append(results, result)
 	}
 
 	payload := sarifLog{

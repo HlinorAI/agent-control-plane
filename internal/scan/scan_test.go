@@ -2,6 +2,7 @@ package scan
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -590,6 +591,72 @@ func TestRunDemoFixtureFindsRiskRulesAndCanonicalRelationships(t *testing.T) {
 	}
 	if strings.Contains(string(encoded), "prod-api-token") {
 		t.Fatalf("report leaked production credential material: %s", encoded)
+	}
+}
+
+func TestRunACP003FindsSharedIdentityAcrossAgents(t *testing.T) {
+	root := t.TempDir()
+	for name, identity := range map[string]string{
+		"first_agent.py":    "shared-role",
+		"second_agent.py":   "shared-role",
+		"isolated_agent.py": "isolated-role",
+	} {
+		path := filepath.Join(root, "agents", name)
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		content := fmt.Sprintf("name: %s\nmodel: openai/gpt-4o\nidentity: %s\n", strings.TrimSuffix(name, filepath.Ext(name)), identity)
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	report, err := Run(root, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	count := 0
+	for _, finding := range report.Findings {
+		if finding.RuleID == "ACP-003" {
+			count++
+		}
+	}
+	if count != 2 {
+		t.Fatalf("expected one ACP-003 finding per shared-identity agent, got %d: %+v", count, report.Findings)
+	}
+}
+
+func TestRunACP009RequiresProductionDisablePath(t *testing.T) {
+	root := t.TempDir()
+	files := map[string]string{
+		"production_agent.py":      "name: production-agent\nmodel: openai/gpt-4o\nenvironment: production\n",
+		"safe_production_agent.py": "name: safe-production-agent\nmodel: openai/gpt-4o\nenvironment: production\ndisable_path: runbook/disable-agent\n",
+	}
+	for name, content := range files {
+		path := filepath.Join(root, "agents", name)
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	report, err := Run(root, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var productionFinding *Finding
+	for index := range report.Findings {
+		finding := &report.Findings[index]
+		if finding.RuleID != "ACP-009" {
+			continue
+		}
+		if productionFinding != nil {
+			t.Fatalf("expected only the unprotected production agent to trigger ACP-009: %+v", report.Findings)
+		}
+		productionFinding = finding
+	}
+	if productionFinding == nil || !strings.Contains(productionFinding.Evidence[0].Path, "production_agent.py") {
+		t.Fatalf("expected ACP-009 for the production agent without a disable path: %+v", report.Findings)
 	}
 }
 

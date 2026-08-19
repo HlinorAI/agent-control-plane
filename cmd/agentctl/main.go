@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/HlinorAI/agent-control-plane/internal/config"
 	"github.com/HlinorAI/agent-control-plane/internal/scan"
@@ -26,10 +27,12 @@ Usage:
 Scan flags:
   --baseline file       suppress findings already present in a JSON report
   --config file         workspace policy file
+  --debug               print safe discovery decisions to stderr
   --dry-run             list approved files without parsing content
   --fail-on severity    fail when findings meet severity: none, low, medium, high, critical
   --format format       output format: text, json or sarif
   --output file         write the report to a file instead of stdout
+  --suppressions file   suppress active findings with reason and expiry from a JSON file
 
 The scanner is read-only and metadata-only. It does not execute scanned content.
 `
@@ -81,6 +84,8 @@ func run(args []string, stdout, stderr io.Writer) error {
 	output := fs.String("output", "", "write the report to a file instead of stdout")
 	baseline := fs.String("baseline", "", "suppress findings already present in a JSON report")
 	configFile := fs.String("config", "", "workspace policy file; defaults to <path>/.agentctl/config.yaml when present")
+	debug := fs.Bool("debug", false, "print safe discovery decisions to stderr")
+	suppressions := fs.String("suppressions", "", "suppress active findings with reason and expiry from a JSON file")
 	if err := fs.Parse(args[2:]); err != nil {
 		return err
 	}
@@ -96,12 +101,28 @@ func run(args []string, stdout, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
-	report, err := scan.Run(root, scan.Options{DryRun: *dryRun, ConfigPath: policyPath})
+	suppressionPath := ""
+	if *suppressions != "" {
+		suppressionPath, err = resolveWorkspaceFile(root, *suppressions, "suppressions")
+		if err != nil {
+			return err
+		}
+	}
+	options := scan.Options{DryRun: *dryRun, ConfigPath: policyPath, SuppressionPath: suppressionPath}
+	if *debug {
+		options.DebugWriter = stderr
+	}
+	report, err := scan.Run(root, options)
 	if err != nil {
 		return err
 	}
 	if *baseline != "" {
 		if err := applyBaseline(&report, *baseline); err != nil {
+			return err
+		}
+	}
+	if *suppressions != "" {
+		if err := applySuppressions(&report, suppressionPath, time.Now()); err != nil {
 			return err
 		}
 	}
@@ -195,6 +216,96 @@ func applyBaseline(report *scan.Report, path string) error {
 	return nil
 }
 
+const maxSuppressionReasonLength = 500
+
+type suppressionEntry struct {
+	FindingID string `json:"finding_id"`
+	Reason    string `json:"reason"`
+	ExpiresAt string `json:"expires_at"`
+}
+
+type suppressionDocument struct {
+	Suppressions *[]suppressionEntry `json:"suppressions"`
+}
+
+func applySuppressions(report *scan.Report, path string, now time.Time) error {
+	if report == nil {
+		return errors.New("suppressions require a scan report")
+	}
+	suppressionPath, err := filepath.Abs(path)
+	if err != nil {
+		return fmt.Errorf("resolve suppressions path: %w", err)
+	}
+	file, err := os.Open(suppressionPath)
+	if err != nil {
+		return fmt.Errorf("open suppressions: %w", err)
+	}
+	defer file.Close()
+
+	var document suppressionDocument
+	decoder := json.NewDecoder(file)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&document); err != nil {
+		return fmt.Errorf("decode suppressions: %w", err)
+	}
+	var trailing json.RawMessage
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		if err == nil {
+			return errors.New("decode suppressions: multiple JSON values are not allowed")
+		}
+		return fmt.Errorf("decode suppressions: trailing data: %w", err)
+	}
+	if document.Suppressions == nil {
+		return errors.New("suppression document must contain a suppressions array")
+	}
+	if len(*document.Suppressions) == 0 {
+		return errors.New("suppression document must contain at least one suppression")
+	}
+	knownFindings := make(map[string]struct{}, len(report.Findings))
+	for _, finding := range report.Findings {
+		knownFindings[finding.ID] = struct{}{}
+	}
+	active := make(map[string]suppressionEntry, len(*document.Suppressions))
+	for index, entry := range *document.Suppressions {
+		id := strings.TrimSpace(entry.FindingID)
+		reason := strings.TrimSpace(entry.Reason)
+		if id == "" {
+			return fmt.Errorf("suppression %d has no finding_id", index+1)
+		}
+		if reason == "" {
+			return fmt.Errorf("suppression %q has no reason", id)
+		}
+		if len(reason) > maxSuppressionReasonLength {
+			return fmt.Errorf("suppression %q reason exceeds %d characters", id, maxSuppressionReasonLength)
+		}
+		expiresAt, err := time.Parse(time.RFC3339, strings.TrimSpace(entry.ExpiresAt))
+		if err != nil {
+			return fmt.Errorf("suppression %q has invalid expires_at: %w", id, err)
+		}
+		if !expiresAt.After(now) {
+			return fmt.Errorf("suppression %q is expired", id)
+		}
+		if _, exists := knownFindings[id]; !exists {
+			return fmt.Errorf("suppression %q does not match a finding in this scan", id)
+		}
+		if _, exists := active[id]; exists {
+			return fmt.Errorf("duplicate suppression for %q", id)
+		}
+		entry.FindingID = id
+		entry.Reason = reason
+		entry.ExpiresAt = expiresAt.UTC().Format(time.RFC3339)
+		active[id] = entry
+	}
+	for index := range report.Findings {
+		if entry, exists := active[report.Findings[index].ID]; exists {
+			report.Findings[index].Suppressed = true
+			report.Findings[index].SuppressionReason = entry.Reason
+			report.Findings[index].SuppressionExpiresAt = entry.ExpiresAt
+		}
+	}
+	return nil
+}
+
 func validSeverity(value string) bool {
 	switch value {
 	case "none", "low", "medium", "high", "critical":
@@ -210,6 +321,9 @@ func findingsMeetThreshold(findings []scan.Finding, threshold string) bool {
 		return false
 	}
 	for _, finding := range findings {
+		if finding.Suppressed {
+			continue
+		}
 		if severityRank(strings.ToLower(finding.Severity)) >= minimum {
 			return true
 		}
@@ -289,6 +403,32 @@ func resolveConfigPath(root, requested string) (string, error) {
 			return "", nil
 		}
 		return "", fmt.Errorf("stat config: %w", err)
+	}
+	return absPath, nil
+}
+
+func resolveWorkspaceFile(root, requested, label string) (string, error) {
+	absRoot, err := filepath.Abs(root)
+	if err != nil {
+		return "", fmt.Errorf("resolve scan root: %w", err)
+	}
+	absPath, err := filepath.Abs(requested)
+	if err != nil {
+		return "", fmt.Errorf("resolve %s path: %w", label, err)
+	}
+	rel, err := filepath.Rel(absRoot, absPath)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("%s must stay inside the scan root", label)
+	}
+	info, err := os.Lstat(absPath)
+	if err != nil {
+		return "", fmt.Errorf("stat %s: %w", label, err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return "", fmt.Errorf("%s path must not be a symlink", label)
+	}
+	if !info.Mode().IsRegular() {
+		return "", fmt.Errorf("%s path must be a regular file", label)
 	}
 	return absPath, nil
 }

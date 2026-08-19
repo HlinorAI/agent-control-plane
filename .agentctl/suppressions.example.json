@@ -1,0 +1,9 @@
+{
+  "suppressions": [
+    {
+      "finding_id": "finding_0123456789abcdef",
+      "reason": "Accepted until the permission migration is complete",
+      "expires_at": "2026-12-31T23:59:59Z"
+    }
+  ]
+}

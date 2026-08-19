@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -115,6 +116,13 @@ func Run(root string, options Options) (Report, error) {
 	if freshnessDays <= 0 {
 		freshnessDays = 30
 	}
+	suppressionPath := ""
+	if options.SuppressionPath != "" {
+		suppressionPath, err = filepath.Abs(options.SuppressionPath)
+		if err != nil {
+			return Report{}, fmt.Errorf("resolve suppression path: %w", err)
+		}
+	}
 
 	report := Report{
 		SchemaVersion: schemaVersion,
@@ -161,13 +169,17 @@ func Run(root string, options Options) (Report, error) {
 			report.FilesSkipped++
 			return nil
 		}
+		if suppressionPath != "" && path == suppressionPath {
+			report.FilesSkipped++
+			return nil
+		}
 		report.FilesScanned++
 		report.ReadFiles = append(report.ReadFiles, filepath.ToSlash(rel))
 		totalBytes += fileInfo.Size()
 		if options.DryRun {
 			return nil
 		}
-		found, err := inspectFile(path, filepath.ToSlash(rel))
+		found, err := inspectFile(path, filepath.ToSlash(rel), options.DebugWriter)
 		if err != nil {
 			report.FilesSkipped++
 			return nil
@@ -421,11 +433,24 @@ func Run(root string, options Options) (Report, error) {
 	return report, nil
 }
 
-func inspectFile(path, relative string) ([]candidate, error) {
+func debugf(writer io.Writer, format string, args ...any) {
+	if writer == nil {
+		return
+	}
+	fmt.Fprintf(writer, format, args...)
+}
+
+func inspectFile(path, relative string, debugWriter io.Writer) ([]candidate, error) {
 	if ignoredSourceFile(relative) {
+		debugf(debugWriter, "agentctl debug: path=%s decision=skip reason=ignored_source_file\n", relative)
 		return nil, nil
 	}
 	if candidates, err := inspectJSONMCPMetadata(path, relative); err != nil || candidates != nil {
+		if err != nil {
+			debugf(debugWriter, "agentctl debug: path=%s decision=skip reason=mcp_metadata_error\n", relative)
+		} else {
+			debugf(debugWriter, "agentctl debug: path=%s decision=accept kind=mcp_metadata candidates=%d\n", relative, len(candidates))
+		}
 		return candidates, err
 	}
 	file, err := os.Open(path)
@@ -591,6 +616,7 @@ func inspectFile(path, relative string) ([]candidate, error) {
 		return nil, err
 	}
 	if firstSignal == 0 && identity == "" && mcpServer == "" && len(approvedServers) == 0 && len(approvedProviders) == 0 && !runtimeMetadataPath(relative) {
+		debugf(debugWriter, "agentctl debug: path=%s decision=skip reason=no_discovery_signals\n", relative)
 		return nil, nil
 	}
 	if name == "" {
@@ -602,8 +628,15 @@ func inspectFile(path, relative string) ([]candidate, error) {
 	} else if runtimeMetadataPath(relative) {
 		kind = "runtime"
 	}
-	if kind == "source" && !isLikelyAgentCandidate(relative, name, nameExplicit, modelDeclarationSignal, frameworkSignal, models, identity, mcpServer, environmentExplicit) {
-		return nil, nil
+	if kind == "source" {
+		candidate, reason := agentCandidateDecision(relative, name, nameExplicit, modelDeclarationSignal, frameworkSignal, models, identity, mcpServer, environmentExplicit)
+		if !candidate {
+			debugf(debugWriter, "agentctl debug: path=%s decision=skip reason=%s signals=name:%t model:%t framework:%t identity:%t mcp:%t environment:%t\n", relative, reason, nameExplicit, modelDeclarationSignal, frameworkSignal, identity != "", mcpServer != "", environmentExplicit)
+			return nil, nil
+		}
+		debugf(debugWriter, "agentctl debug: path=%s decision=accept kind=agent signals=name:%t model:%t framework:%t identity:%t mcp:%t environment:%t\n", relative, nameExplicit, modelDeclarationSignal, frameworkSignal, identity != "", mcpServer != "", environmentExplicit)
+	} else {
+		debugf(debugWriter, "agentctl debug: path=%s decision=accept kind=%s\n", relative, kind)
 	}
 	if firstSignal == 0 {
 		firstSignal = 1
@@ -737,6 +770,8 @@ func isMCPPolicySource(relative string) bool {
 	return strings.Contains(base, "mcp") || strings.Contains(base, "server") || strings.Contains(base, "manifest")
 }
 
+const permissionSignalWindow = 8
+
 func permissionScope(readOnlyLine, writeScopeLine int) bool {
 	if readOnlyLine == 0 || writeScopeLine == 0 {
 		return false
@@ -745,7 +780,9 @@ func permissionScope(readOnlyLine, writeScopeLine int) bool {
 	if distance < 0 {
 		distance = -distance
 	}
-	return distance <= 8
+	// Keep permission signals local to one component declaration; a wider window
+	// can correlate unrelated read-only and write scopes in the same file.
+	return distance <= permissionSignalWindow
 }
 
 func isModelReferenceLine(line string) bool {
@@ -810,29 +847,43 @@ func runtimeMetadataPath(relative string) bool {
 }
 
 func isLikelyAgentCandidate(relative, name string, nameExplicit, modelDeclarationSignal, frameworkSignal bool, models []string, identity, mcpServer string, environmentExplicit bool) bool {
+	candidate, _ := agentCandidateDecision(relative, name, nameExplicit, modelDeclarationSignal, frameworkSignal, models, identity, mcpServer, environmentExplicit)
+	return candidate
+}
+
+func agentCandidateDecision(relative, name string, nameExplicit, modelDeclarationSignal, frameworkSignal bool, models []string, identity, mcpServer string, environmentExplicit bool) (bool, string) {
 	if isGitHubWorkflowPath(relative) {
-		return false
+		return false, "github_workflow"
 	}
 	extension := strings.ToLower(filepath.Ext(relative))
 	if extension == ".md" || extension == ".json" {
-		return nameExplicit && (isAgentName(name) || isAgentMetadataPath(relative))
+		if nameExplicit && (isAgentName(name) || isAgentMetadataPath(relative)) {
+			return true, "metadata_signal"
+		}
+		return false, "metadata_without_agent_signal"
 	}
 	if nameExplicit && isAgentPath(relative) && isAgentName(name) {
-		return true
+		return true, "explicit_agent_name"
 	}
 	if !isAgentPath(relative) || !isAgentEntryFile(relative) {
-		return false
+		return false, "path_or_entry_not_agent_like"
 	}
 	if identity != "" || mcpServer != "" || environmentExplicit {
-		return true
+		return true, "governance_signal"
 	}
 	if modelDeclarationSignal {
-		return hasAgentFileMarker(relative) || (nameExplicit && isAgentName(name))
+		if hasAgentFileMarker(relative) || (nameExplicit && isAgentName(name)) {
+			return true, "model_and_agent_signal"
+		}
+		return false, "model_without_agent_signal"
 	}
 	if len(models) == 0 {
-		return false
+		return false, "no_static_model_signal"
 	}
-	return frameworkSignal && hasAgentFileMarker(relative)
+	if frameworkSignal && hasAgentFileMarker(relative) {
+		return true, "framework_and_file_signal"
+	}
+	return false, "model_without_framework_signal"
 }
 
 func isAgentMetadataPath(relative string) bool {
