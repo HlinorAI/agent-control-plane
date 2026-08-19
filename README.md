@@ -28,6 +28,38 @@ The baseline matches stable finding IDs. It does not weaken the scanner rules;
 it only removes findings already present in the supplied report from the current
 output. Review and update the baseline deliberately.
 
+For a time-bound exception, use a separate suppression document. Every entry
+requires a stable finding ID, a reviewable reason, and an RFC 3339 expiry:
+
+```bash
+go run ./cmd/agentctl scan ./workspace --format sarif \
+  --suppressions .agentctl/suppressions.json --fail-on high --output agentctl.sarif
+```
+
+Example document:
+
+```json
+{
+  "suppressions": [
+    {
+      "finding_id": "finding_0123456789abcdef",
+      "reason": "Accepted until the permission migration is complete",
+      "expires_at": "2026-12-31T23:59:59Z"
+    }
+  ]
+}
+```
+
+Suppressed findings remain visible in JSON, text, and SARIF with their reason
+and expiry; they are excluded from `--fail-on`. SARIF uses the standard
+`result.suppressions` field with `kind: external`. Unknown finding IDs,
+unknown JSON fields, a misspelled top-level key, expired, duplicate, or
+incomplete entries fail closed. Finding IDs are deterministic opaque IDs tied
+to the source path/entity and rule, so renaming a source file or changing the
+rule context requires reviewing the suppression again. Use `--debug` to print
+safe discovery decisions to stderr while keeping JSON and SARIF on stdout or
+the selected output path.
+
 Output paths may be relative or absolute. The parent directory must already
 exist, output directories are rejected, final output symlinks are rejected, and
 reports are written atomically with mode `0600`.

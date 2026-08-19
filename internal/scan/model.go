@@ -2,6 +2,7 @@ package scan
 
 import (
 	"fmt"
+	"io"
 	"sort"
 	"strings"
 )
@@ -9,8 +10,10 @@ import (
 const schemaVersion = "0.1"
 
 type Options struct {
-	DryRun     bool
-	ConfigPath string
+	DryRun          bool
+	ConfigPath      string
+	DebugWriter     io.Writer
+	SuppressionPath string
 }
 
 type Report struct {
@@ -85,14 +88,17 @@ type Relationship struct {
 }
 
 type Finding struct {
-	ID              string     `json:"id"`
-	RuleID          string     `json:"rule_id"`
-	Severity        string     `json:"severity"`
-	Message         string     `json:"message"`
-	AgentID         string     `json:"agent_id"`
-	Confidence      float64    `json:"confidence"`
-	Evidence        []Evidence `json:"evidence"`
-	RemediationHint string     `json:"remediation_hint"`
+	ID                   string     `json:"id"`
+	RuleID               string     `json:"rule_id"`
+	Severity             string     `json:"severity"`
+	Message              string     `json:"message"`
+	AgentID              string     `json:"agent_id"`
+	Confidence           float64    `json:"confidence"`
+	Evidence             []Evidence `json:"evidence"`
+	RemediationHint      string     `json:"remediation_hint"`
+	Suppressed           bool       `json:"suppressed,omitempty"`
+	SuppressionReason    string     `json:"suppression_reason,omitempty"`
+	SuppressionExpiresAt string     `json:"suppression_expires_at,omitempty"`
 }
 
 type Evidence struct {
@@ -131,7 +137,14 @@ func (r Report) Text() string {
 	if len(r.Findings) > 0 {
 		b.WriteString("\nFindings:\n")
 		for _, finding := range r.Findings {
-			fmt.Fprintf(&b, "- [%s] %s: %s\n", finding.Severity, finding.RuleID, finding.Message)
+			status := ""
+			if finding.Suppressed {
+				status = " (suppressed)"
+			}
+			fmt.Fprintf(&b, "- [%s] %s%s: %s\n", finding.Severity, finding.RuleID, status, finding.Message)
+			if finding.Suppressed {
+				fmt.Fprintf(&b, "  suppression: %s (expires %s)\n", finding.SuppressionReason, finding.SuppressionExpiresAt)
+			}
 			for _, evidence := range finding.Evidence {
 				fmt.Fprintf(&b, "  evidence: %s:%d\n", evidence.Path, evidence.Line)
 			}
