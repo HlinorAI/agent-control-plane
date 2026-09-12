@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/HlinorAI/agent-control-plane/internal/config"
+	"github.com/HlinorAI/agent-control-plane/internal/runtime"
 	"github.com/HlinorAI/agent-control-plane/internal/scan"
 )
 
@@ -23,6 +24,7 @@ Usage:
   agentctl version
   agentctl init <path>
   agentctl scan <path> [flags]
+  agentctl runtime-audit <events> [flags]
 
 Scan flags:
   --baseline file       suppress findings already present in a JSON report
@@ -32,7 +34,14 @@ Scan flags:
   --fail-on severity    fail when findings meet severity: none, low, medium, high, critical
   --format format       output format: text, json or sarif
   --output file         write the report to a file instead of stdout
-  --suppressions file   suppress active findings with reason and expiry from a JSON file
+	  --suppressions file   suppress active findings with reason and expiry from a JSON file
+
+Runtime audit flags:
+	  --source format        input source: jsonl, otel-json or api-gateway
+	  --fail-on severity     return non-zero at this severity or higher
+	  --format format        output format: text or json
+	  --inventory file       static agentctl JSON report to compare with runtime events
+	  --output file          write the audit report to a file instead of stdout
 
 The scanner is read-only and metadata-only. It does not execute scanned content.
 `
@@ -65,8 +74,11 @@ func run(args []string, stdout, stderr io.Writer) error {
 	if args[0] == "init" {
 		return runInit(args[1:], stdout, stderr)
 	}
+	if args[0] == "runtime-audit" {
+		return runRuntimeAudit(args[1:], stdout, stderr)
+	}
 	if args[0] != "scan" {
-		return fmt.Errorf("unknown command %q; available commands are init and scan", args[0])
+		return fmt.Errorf("unknown command %q; available commands are init, scan and runtime-audit", args[0])
 	}
 	if len(args) == 2 && (args[1] == "--help" || args[1] == "-h") {
 		_, err := io.WriteString(stdout, usage)
@@ -379,6 +391,102 @@ func runInit(args []string, stdout, stderr io.Writer) error {
 	}
 	_, err = fmt.Fprintf(stdout, "Initialized Agent Control Plane workspace\nConfig: %s\n", path)
 	return err
+}
+
+func runRuntimeAudit(args []string, stdout, stderr io.Writer) error {
+	if len(args) < 1 {
+		return errors.New("runtime-audit requires an events JSONL path")
+	}
+	fs := flag.NewFlagSet("runtime-audit", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	source := fs.String("source", string(runtime.SourceJSONL), "input source: jsonl, otel-json or api-gateway")
+	inventoryPath := fs.String("inventory", "", "static agentctl JSON report")
+	format := fs.String("format", "text", "output format: text or json")
+	failOn := fs.String("fail-on", "none", "return a non-zero exit code at this severity or higher")
+	output := fs.String("output", "", "write the audit report to a file instead of stdout")
+	if err := fs.Parse(args[1:]); err != nil {
+		return err
+	}
+	if *inventoryPath == "" {
+		return errors.New("runtime-audit requires --inventory")
+	}
+	if *source != string(runtime.SourceJSONL) && *source != string(runtime.SourceOTelJSON) && *source != string(runtime.SourceAPIGateway) {
+		return fmt.Errorf("unsupported runtime source %q", *source)
+	}
+	if *format != "text" && *format != "json" {
+		return fmt.Errorf("unsupported runtime audit format %q", *format)
+	}
+	if !validSeverity(*failOn) {
+		return fmt.Errorf("unsupported fail-on severity %q", *failOn)
+	}
+	eventsFile, err := os.Open(args[0])
+	if err != nil {
+		return fmt.Errorf("open runtime events: %w", err)
+	}
+	defer eventsFile.Close()
+	events, skipped, err := runtime.ReadSource(eventsFile, runtime.Source(*source), runtime.Options{})
+	if err != nil {
+		return err
+	}
+	inventoryFile, err := os.Open(*inventoryPath)
+	if err != nil {
+		return fmt.Errorf("open inventory: %w", err)
+	}
+	defer inventoryFile.Close()
+	var inventory scan.Report
+	decoder := json.NewDecoder(inventoryFile)
+	if err := decoder.Decode(&inventory); err != nil {
+		return fmt.Errorf("decode inventory: %w", err)
+	}
+	audit := runtime.Audit(runtime.Aggregate(events, skipped), inventory)
+	var payload []byte
+	if *format == "json" {
+		payload, err = json.MarshalIndent(audit, "", "  ")
+		if err == nil {
+			payload = append(payload, '\n')
+		}
+	} else {
+		payload = []byte(runtimeAuditText(audit))
+	}
+	if err != nil {
+		return err
+	}
+	if *output != "" {
+		if err := writeOutputFile(*output, payload); err != nil {
+			return err
+		}
+	} else if _, err := stdout.Write(payload); err != nil {
+		return err
+	}
+	if runtimeFindingsMeetThreshold(audit.Findings, *failOn) {
+		return fmt.Errorf("runtime audit found findings at or above %s severity", *failOn)
+	}
+	return nil
+}
+
+func runtimeAuditText(report runtime.AuditReport) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "Agent Control Plane runtime audit\nSchema: %s\nEvents: %d\nMatched agents: %d\nUnmatched agents: %d\nFindings: %d\n", report.SchemaVersion, report.Runtime.EventsRead, report.MatchedAgents, report.Unmatched, len(report.Findings))
+	for _, finding := range report.Findings {
+		fmt.Fprintf(&b, "- [%s] %s: %s\n", finding.Severity, finding.RuleID, finding.Message)
+		for _, evidence := range finding.Evidence {
+			fmt.Fprintf(&b, "  evidence: %s\n", evidence)
+		}
+	}
+	return b.String()
+}
+
+func runtimeFindingsMeetThreshold(findings []runtime.Finding, threshold string) bool {
+	minimum := severityRank(threshold)
+	if minimum == 0 {
+		return false
+	}
+	for _, finding := range findings {
+		if severityRank(finding.Severity) >= minimum {
+			return true
+		}
+	}
+	return false
 }
 
 func resolveConfigPath(root, requested string) (string, error) {
