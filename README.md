@@ -163,7 +163,7 @@ The alpha includes ten explainable rules:
 ## Current limitations
 
 - Detection is heuristic and should be reviewed by a human.
-- The alpha scans local repositories and configuration files; GitHub, GitLab, Docker and Kubernetes connectors are not implemented yet.
+- The alpha scans local repositories and configuration files. A read-only connector metadata layer now normalizes GitHub, GitLab, Docker and Kubernetes discovery payloads; network clients and credential resolution remain outside the local scan path.
 - No runtime proxy, IAM remediation, hosted control plane, dashboard or compliance certification is included.
 - JSON and SARIF are stable report formats for static and runtime findings. Runtime snapshots can be compared with `agentctl runtime-diff` and exported as CSV or HTML; issue export is planned.
 
