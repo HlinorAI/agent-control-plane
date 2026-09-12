@@ -90,9 +90,9 @@ Runtime-аудит должен быть **наблюдателем, а не и�
 
 В репозитории реализован библиотечный слой `internal/runtime`, который выполняет безопасное чтение нормализованных JSONL-событий, детерминированную агрегацию и сопоставление со статическим `scan.Report`. Добавлены правила `ACP-R001` — `ACP-R004`, включая обнаружение undeclared target, фактического provider, production write activity и неоднозначного сопоставления агента.
 
-Добавлена команда `agentctl runtime-audit <events> --inventory <report.json>`. Флаг `--source` выбирает `jsonl`, `otel-json` или `api-gateway`. Команда поддерживает text/json output, атомарную запись через существующий механизм `--output` и CI-порог `--fail-on`.
+Добавлена команда `agentctl runtime-audit <events> --inventory <report.json>`. Флаг `--source` выбирает `jsonl`, `otel-json` или `api-gateway`. Команда поддерживает text/json/SARIF output, `--baseline`, expiring `--suppressions`, атомарную запись через существующий механизм `--output` и CI-порог `--fail-on`.
 
-Адаптеры принимают только metadata-поля. OpenTelemetry spans преобразуются по атрибутам агента, инструмента, окружения, provider и HTTP-статуса. API Gateway записи поддерживают snake_case и camelCase идентификаторы, JSONL и JSON-массив. Payload запроса и ответа не читается и не переносится в нормализованное событие. Provider matching теперь выполняется на уровне конкретного агента: фактический provider считается заявленным только тогда, когда он принадлежит модели, указанной в `agent.models`.
+Адаптеры принимают только metadata-поля. OpenTelemetry spans преобразуются по атрибутам агента, инструмента, окружения, provider и HTTP-статуса. API Gateway записи поддерживают snake_case и camelCase идентификаторы, JSONL и JSON-массив. Payload запроса и ответа не читается и не переносится в нормализованное событие. Provider matching теперь выполняется на уровне конкретного агента: фактический provider считается заявленным только тогда, когда он принадлежит модели, указанной в `agent.models`. Normalized JSONL отклоняет sensitive keys (`prompt`, `arguments`, `request_body`, `response_body`, `headers`, `authorization`, `token` и аналогичные) и ограничивает длину metadata fields.
 
 Следующий этап — добавить адаптеры OpenTelemetry и API gateway, не меняя нормализованный контракт событий.
 

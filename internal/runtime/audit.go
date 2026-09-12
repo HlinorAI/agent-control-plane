@@ -10,14 +10,17 @@ import (
 )
 
 type Finding struct {
-	ID              string   `json:"id"`
-	RuleID          string   `json:"rule_id"`
-	Severity        string   `json:"severity"`
-	Message         string   `json:"message"`
-	AgentID         string   `json:"agent_id,omitempty"`
-	Confidence      float64  `json:"confidence"`
-	Evidence        []string `json:"evidence,omitempty"`
-	RemediationHint string   `json:"remediation_hint"`
+	ID                   string   `json:"id"`
+	RuleID               string   `json:"rule_id"`
+	Severity             string   `json:"severity"`
+	Message              string   `json:"message"`
+	AgentID              string   `json:"agent_id,omitempty"`
+	Confidence           float64  `json:"confidence"`
+	Evidence             []string `json:"evidence,omitempty"`
+	RemediationHint      string   `json:"remediation_hint"`
+	Suppressed           bool     `json:"suppressed,omitempty"`
+	SuppressionReason    string   `json:"suppression_reason,omitempty"`
+	SuppressionExpiresAt string   `json:"suppression_expires_at,omitempty"`
 }
 
 type AuditReport struct {

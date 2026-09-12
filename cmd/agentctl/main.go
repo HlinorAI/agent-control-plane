@@ -39,9 +39,11 @@ Scan flags:
 Runtime audit flags:
 	  --source format        input source: jsonl, otel-json or api-gateway
 	  --fail-on severity     return non-zero at this severity or higher
-	  --format format        output format: text or json
+	  --format format        output format: text, json or sarif
+	  --baseline file        suppress findings already present in a runtime JSON report
 	  --inventory file       static agentctl JSON report to compare with runtime events
 	  --output file          write the audit report to a file instead of stdout
+	  --suppressions file    suppress active runtime findings with reason and expiry
 
 The scanner is read-only and metadata-only. It does not execute scanned content.
 `
@@ -403,7 +405,9 @@ func runRuntimeAudit(args []string, stdout, stderr io.Writer) error {
 	inventoryPath := fs.String("inventory", "", "static agentctl JSON report")
 	format := fs.String("format", "text", "output format: text or json")
 	failOn := fs.String("fail-on", "none", "return a non-zero exit code at this severity or higher")
+	baseline := fs.String("baseline", "", "suppress findings already present in a runtime JSON report")
 	output := fs.String("output", "", "write the audit report to a file instead of stdout")
+	suppressions := fs.String("suppressions", "", "suppress active runtime findings with reason and expiry")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
@@ -413,7 +417,7 @@ func runRuntimeAudit(args []string, stdout, stderr io.Writer) error {
 	if *source != string(runtime.SourceJSONL) && *source != string(runtime.SourceOTelJSON) && *source != string(runtime.SourceAPIGateway) {
 		return fmt.Errorf("unsupported runtime source %q", *source)
 	}
-	if *format != "text" && *format != "json" {
+	if *format != "text" && *format != "json" && *format != "sarif" {
 		return fmt.Errorf("unsupported runtime audit format %q", *format)
 	}
 	if !validSeverity(*failOn) {
@@ -439,9 +443,34 @@ func runRuntimeAudit(args []string, stdout, stderr io.Writer) error {
 		return fmt.Errorf("decode inventory: %w", err)
 	}
 	audit := runtime.Audit(runtimeReport, inventory)
+	if *baseline != "" {
+		baselineFile, err := os.Open(*baseline)
+		if err != nil {
+			return fmt.Errorf("open runtime baseline: %w", err)
+		}
+		defer baselineFile.Close()
+		if err := runtime.ApplyBaseline(&audit, baselineFile); err != nil {
+			return err
+		}
+	}
+	if *suppressions != "" {
+		suppressionFile, err := os.Open(*suppressions)
+		if err != nil {
+			return fmt.Errorf("open runtime suppressions: %w", err)
+		}
+		defer suppressionFile.Close()
+		if err := runtime.ApplySuppressions(&audit, suppressionFile, time.Now()); err != nil {
+			return err
+		}
+	}
 	var payload []byte
 	if *format == "json" {
 		payload, err = json.MarshalIndent(audit, "", "  ")
+		if err == nil {
+			payload = append(payload, '\n')
+		}
+	} else if *format == "sarif" {
+		payload, err = audit.SARIF()
 		if err == nil {
 			payload = append(payload, '\n')
 		}
