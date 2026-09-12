@@ -39,9 +39,11 @@ func Audit(runtimeReport Report, inventory scan.Report) AuditReport {
 			byName[name] = append(byName[name], agent)
 		}
 	}
-	providers := make(map[string]bool)
+	modelsByID := make(map[string]scan.Model, len(inventory.Models))
+	modelsByName := make(map[string]scan.Model)
 	for _, model := range inventory.Models {
-		providers[strings.ToLower(strings.TrimSpace(model.Provider))] = true
+		modelsByID[model.ID] = model
+		modelsByName[strings.ToLower(strings.TrimSpace(model.Name))] = model
 	}
 
 	for _, summary := range runtimeReport.Agents {
@@ -67,8 +69,9 @@ func Audit(runtimeReport Report, inventory scan.Report) AuditReport {
 				})
 			}
 		}
+		declaredProviders := declaredProvidersForAgent(agent, modelsByID, modelsByName)
 		for _, provider := range summary.Providers {
-			if provider != "" && !providers[strings.ToLower(strings.TrimSpace(provider))] {
+			if provider != "" && !declaredProviders[strings.ToLower(strings.TrimSpace(provider))] {
 				result.Findings = append(result.Findings, Finding{
 					RuleID: "ACP-R002", Severity: "High", Message: fmt.Sprintf("agent %q used provider %q not present in static model inventory", agent.Name, provider), AgentID: agent.ID, Confidence: 0.86,
 					Evidence: []string{provider, summary.LastSeen.Format("2006-01-02T15:04:05Z07:00")}, RemediationHint: "Verify the provider and update workspace policy or runtime configuration.",
@@ -110,6 +113,23 @@ func matchAgent(summary AgentSummary, byID map[string]scan.Agent, byName map[str
 		return matches[0], true
 	}
 	return scan.Agent{}, false
+}
+
+func declaredProvidersForAgent(agent scan.Agent, modelsByID map[string]scan.Model, modelsByName map[string]scan.Model) map[string]bool {
+	providers := make(map[string]bool)
+	for _, modelRef := range agent.Models {
+		model, ok := modelsByID[modelRef]
+		if !ok {
+			model, ok = modelsByName[strings.ToLower(strings.TrimSpace(modelRef))]
+		}
+		if ok {
+			provider := strings.ToLower(strings.TrimSpace(model.Provider))
+			if provider != "" {
+				providers[provider] = true
+			}
+		}
+	}
+	return providers
 }
 
 func runtimeAgentLabel(summary AgentSummary) string {

@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/HlinorAI/agent-control-plane/blob/main/docs/runtime-event.v1.schema.json",
+  "title": "Agent Control Plane runtime.v1 event",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["timestamp", "operation", "target", "success"],
+  "anyOf": [
+    {"required": ["agent_id"]},
+    {"required": ["agent_name"]}
+  ],
+  "properties": {
+    "timestamp": {"type": "string", "format": "date-time"},
+    "request_id": {"type": "string", "maxLength": 512},
+    "agent_id": {"type": "string", "minLength": 1, "maxLength": 512},
+    "agent_name": {"type": "string", "minLength": 1, "maxLength": 512},
+    "environment": {"type": "string", "maxLength": 128},
+    "operation": {"type": "string", "minLength": 1, "maxLength": 256},
+    "target": {"type": "string", "minLength": 1, "maxLength": 1024},
+    "provider": {"type": "string", "maxLength": 256},
+    "action": {"type": "string", "maxLength": 128},
+    "success": {"type": "boolean"}
+  }
+}

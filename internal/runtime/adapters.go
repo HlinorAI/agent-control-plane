@@ -34,6 +34,19 @@ func ReadSource(r io.Reader, source Source, options Options) ([]Event, int, erro
 	}
 }
 
+// AggregateSource streams JSONL directly into an aggregate report. Structured
+// adapter formats are normalized first because their envelope must be decoded.
+func AggregateSource(r io.Reader, source Source, options Options) (Report, error) {
+	if source == "" || source == SourceJSONL {
+		return AggregateReader(r, options)
+	}
+	events, skipped, err := ReadSource(r, source, options)
+	if err != nil {
+		return Report{}, err
+	}
+	return Aggregate(events, skipped), nil
+}
+
 type otelDocument struct {
 	ResourceSpans []otelResourceSpans `json:"resourceSpans"`
 }
