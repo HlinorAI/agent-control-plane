@@ -29,7 +29,7 @@ jobs:
             -root internal/runtimefuzz/testdata/fuzz \
             -max-bytes 262144 \
             -allow-adversarial \
-            > fuzz-payload-validation.json
+            > /tmp/fuzz-payload-validation.json
 
       - name: Run full tests
         run: go test ./... -count=1
