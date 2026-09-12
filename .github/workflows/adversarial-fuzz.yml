@@ -12,6 +12,7 @@ on:
       - "docs/connectors.md"
       - "docs/**"
       - "README.md"
+      - ".github/workflows/release.yml"
       - "testdata/adversarial/**"
       - "testdata/fuzz/**"
       - ".github/workflows/adversarial-fuzz.yml"
