@@ -16,6 +16,23 @@ go run ./cmd/agentctl scan ./workspace --format json --output report.json
 go run ./cmd/agentctl scan ./workspace --format sarif --fail-on high --output agentctl.sarif
 ```
 
+Runtime-аудит принимает metadata-only JSONL, OpenTelemetry JSON или API Gateway events:
+
+```bash
+go run ./cmd/agentctl runtime-audit events.jsonl \
+  --inventory static-report.json --format sarif --fail-on high \
+  --output runtime.sarif
+go run ./cmd/agentctl runtime-audit events.jsonl \
+  --inventory static-report.json --format json --output runtime.json
+go run ./cmd/agentctl runtime-diff before-runtime.json after-runtime.json \
+  --format html --output runtime-diff.html
+```
+
+Runtime input is intentionally metadata-only. Prompts, tool arguments, request and
+response bodies, authorization headers, tokens and secrets are rejected or omitted.
+Runtime findings can be compared with a JSON baseline and can use expiring
+reviewed suppressions in the same way as static findings.
+
 For incremental CI gates, keep a reviewed JSON report and suppress findings that
 were already accepted in that baseline:
 
@@ -129,6 +146,17 @@ ACP-005 is emitted only for MCP policy sources such as `.mcp.json`,
 Source-code references to an MCP server are inventory evidence but do not create
 a policy finding by themselves.
 
+The runtime audit correlates observed agent activity with that inventory. It supports
+streaming JSONL aggregation, OpenTelemetry/API Gateway normalization, runtime SARIF,
+stable baselines and expiring suppressions. `runtime-diff` compares snapshots and
+exports text, JSON, CSV or HTML.
+
+The read-only connector metadata layer normalizes already-fetched GitHub, GitLab,
+Docker and Kubernetes metadata. Cloud audit normalization supports AWS, GCP and
+Azure event shapes, and policy generation produces review-only `policy-draft.v1`
+objects from observed usage. These layers do not call external APIs, resolve
+credentials, read secret values, change IAM, block traffic or enforce policies.
+
 The default policy excludes common non-production paths such as tests, examples, samples, tutorials, fixtures, documentation and schemas. Agent definitions under tooling directories such as `.claude` and `.github`, Markdown agent files, and framework library layouts remain scannable when they contain strong agent signals. Use `.agentctl/config.yaml` to add workspace-specific exclusions and approved providers or MCP servers. `agentctl init` never overwrites an existing policy.
 
 ## Risk rules
@@ -164,11 +192,12 @@ The alpha includes ten explainable rules:
 
 - Detection is heuristic and should be reviewed by a human.
 - The alpha scans local repositories and configuration files. A read-only connector metadata layer now normalizes GitHub, GitLab, Docker and Kubernetes discovery payloads; network clients and credential resolution remain outside the local scan path.
-- No runtime proxy, IAM remediation, hosted control plane, dashboard or compliance certification is included.
+- No runtime proxy, IAM remediation, hosted control plane, dashboard, issue export or compliance certification is included. Cloud policy output is a draft and requires human review.
 - JSON and SARIF are stable report formats for static and runtime findings. Runtime snapshots can be compared with `agentctl runtime-diff` and exported as CSV or HTML; issue export is planned.
 
 SARIF is available now. Use `--fail-on high` or `--fail-on critical` to make findings a CI gate; the default `none` keeps scans informational.
 Use `agentctl --help`, `agentctl scan --help`, or `agentctl init --help` for the supported command surface.
+Use `agentctl runtime-audit --help` and `agentctl runtime-diff --help` for runtime commands.
 
 ### GitHub Actions example
 
