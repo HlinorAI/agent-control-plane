@@ -165,7 +165,7 @@ The alpha includes ten explainable rules:
 - Detection is heuristic and should be reviewed by a human.
 - The alpha scans local repositories and configuration files; GitHub, GitLab, Docker and Kubernetes connectors are not implemented yet.
 - No runtime proxy, IAM remediation, hosted control plane, dashboard or compliance certification is included.
-- JSON and SARIF are the stable report formats for the current slice; CSV and issue export are planned.
+- JSON and SARIF are stable report formats for static and runtime findings; CSV and issue export are planned.
 
 SARIF is available now. Use `--fail-on high` or `--fail-on critical` to make findings a CI gate; the default `none` keeps scans informational.
 Use `agentctl --help`, `agentctl scan --help`, or `agentctl init --help` for the supported command surface.
