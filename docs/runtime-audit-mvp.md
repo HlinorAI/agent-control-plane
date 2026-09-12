@@ -92,6 +92,8 @@ Runtime-аудит должен быть **наблюдателем, а не и�
 
 Добавлена команда `agentctl runtime-audit <events> --inventory <report.json>`. Флаг `--source` выбирает `jsonl`, `otel-json` или `api-gateway`. Команда поддерживает text/json/SARIF output, `--baseline`, expiring `--suppressions`, атомарную запись через существующий механизм `--output` и CI-порог `--fail-on`.
 
+Для сравнения snapshots используется `agentctl runtime-diff before.json after.json`. Команда показывает добавленные, удалённые и неизменившиеся findings и поддерживает `--format text|json|csv|html`. Diff сравнивает стабильные finding IDs, поэтому его можно использовать в nightly security review и регрессионных CI-проверках.
+
 Адаптеры принимают только metadata-поля. OpenTelemetry spans преобразуются по атрибутам агента, инструмента, окружения, provider и HTTP-статуса. API Gateway записи поддерживают snake_case и camelCase идентификаторы, JSONL и JSON-массив. Payload запроса и ответа не читается и не переносится в нормализованное событие. Provider matching теперь выполняется на уровне конкретного агента: фактический provider считается заявленным только тогда, когда он принадлежит модели, указанной в `agent.models`. Normalized JSONL отклоняет sensitive keys (`prompt`, `arguments`, `request_body`, `response_body`, `headers`, `authorization`, `token` и аналогичные) и ограничивает длину metadata fields.
 
 Следующий этап — добавить адаптеры OpenTelemetry и API gateway, не меняя нормализованный контракт событий.

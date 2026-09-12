@@ -24,7 +24,8 @@ Usage:
   agentctl version
   agentctl init <path>
   agentctl scan <path> [flags]
-  agentctl runtime-audit <events> [flags]
+	agentctl runtime-audit <events> [flags]
+	agentctl runtime-diff <before.json> <after.json> [flags]
 
 Scan flags:
   --baseline file       suppress findings already present in a JSON report
@@ -44,6 +45,10 @@ Runtime audit flags:
 	  --inventory file       static agentctl JSON report to compare with runtime events
 	  --output file          write the audit report to a file instead of stdout
 	  --suppressions file    suppress active runtime findings with reason and expiry
+
+Runtime diff flags:
+	  --format format        output format: text, json, csv or html
+	  --output file          write the diff to a file instead of stdout
 
 The scanner is read-only and metadata-only. It does not execute scanned content.
 `
@@ -78,6 +83,9 @@ func run(args []string, stdout, stderr io.Writer) error {
 	}
 	if args[0] == "runtime-audit" {
 		return runRuntimeAudit(args[1:], stdout, stderr)
+	}
+	if args[0] == "runtime-diff" {
+		return runRuntimeDiff(args[1:], stdout, stderr)
 	}
 	if args[0] != "scan" {
 		return fmt.Errorf("unknown command %q; available commands are init, scan and runtime-audit", args[0])
