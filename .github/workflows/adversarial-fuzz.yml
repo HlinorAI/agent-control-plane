@@ -10,6 +10,8 @@ on:
       - "internal/connectors/**"
       - "internal/runtimefuzz/**"
       - "docs/connectors.md"
+      - "docs/**"
+      - "README.md"
       - "testdata/adversarial/**"
       - "testdata/fuzz/**"
       - ".github/workflows/adversarial-fuzz.yml"
