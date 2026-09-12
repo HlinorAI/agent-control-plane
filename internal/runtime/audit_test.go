@@ -11,7 +11,10 @@ func TestAuditFindsUndeclaredProductionWrite(t *testing.T) {
 	runtimeReport := Aggregate([]Event{{
 		Timestamp: time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC), AgentID: "a1", AgentName: "support", Environment: "production", Operation: "tool_call", Target: "crm.write", Provider: "unlisted", Action: "write", Success: true,
 	}}, 0)
-	result := Audit(runtimeReport, scan.Report{Agents: []scan.Agent{{ID: "a1", Name: "support", Tools: []string{"crm.search"}}}})
+	result := Audit(runtimeReport, scan.Report{
+		Agents: []scan.Agent{{ID: "a1", Name: "support", Tools: []string{"crm.search"}, Models: []string{"m1"}}},
+		Models: []scan.Model{{ID: "m1", Name: "declared-model", Provider: "declared-provider"}},
+	})
 	if result.MatchedAgents != 1 || len(result.Findings) != 3 {
 		t.Fatalf("unexpected audit result: %+v", result)
 	}

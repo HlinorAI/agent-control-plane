@@ -424,7 +424,7 @@ func runRuntimeAudit(args []string, stdout, stderr io.Writer) error {
 		return fmt.Errorf("open runtime events: %w", err)
 	}
 	defer eventsFile.Close()
-	events, skipped, err := runtime.ReadSource(eventsFile, runtime.Source(*source), runtime.Options{})
+	runtimeReport, err := runtime.AggregateSource(eventsFile, runtime.Source(*source), runtime.Options{})
 	if err != nil {
 		return err
 	}
@@ -438,7 +438,7 @@ func runRuntimeAudit(args []string, stdout, stderr io.Writer) error {
 	if err := decoder.Decode(&inventory); err != nil {
 		return fmt.Errorf("decode inventory: %w", err)
 	}
-	audit := runtime.Audit(runtime.Aggregate(events, skipped), inventory)
+	audit := runtime.Audit(runtimeReport, inventory)
 	var payload []byte
 	if *format == "json" {
 		payload, err = json.MarshalIndent(audit, "", "  ")
