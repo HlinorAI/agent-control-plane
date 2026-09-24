@@ -4,6 +4,13 @@ Read-only discovery and evidence-backed inventory for AI agents, tools, identiti
 
 > Public alpha: the current scanner is a local, deterministic heuristic tool. It is useful for repository/configuration reviews, not a replacement for production security controls.
 
+## In 30 seconds
+
+Agent Control Plane scans an approved local directory in read-only mode and builds an inventory of what actually runs in your code: agent entrypoints, model and provider references, tools, MCP servers and identities. Deterministic rules flag risks with file-and-line evidence. SARIF output plugs into GitHub Code Scanning and CI gates. It never reads prompts, secrets, request bodies or tokens - and never changes your systems.
+
+Website: https://hlinor.com/open-source/agent-control-plane/
+
+
 ## Quick start
 
 Run locally from a checkout:
@@ -16,7 +23,7 @@ go run ./cmd/agentctl scan ./workspace --format json --output report.json
 go run ./cmd/agentctl scan ./workspace --format sarif --fail-on high --output agentctl.sarif
 ```
 
-Runtime-аудит принимает metadata-only JSONL, OpenTelemetry JSON или API Gateway events:
+Runtime audit accepts metadata-only JSONL, OpenTelemetry JSON or API Gateway events:
 
 ```bash
 go run ./cmd/agentctl runtime-audit events.jsonl \
