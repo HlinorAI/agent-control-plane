@@ -1,25 +1,25 @@
-# Runtime-аудит Agent Control Plane: MVP
+# Agent Control Plane Runtime Audit: MVP
 
-## Решение
+## Decision
 
-Agent Control Plane следует расширять отдельным **runtime evidence layer**, а не превращать статический сканер в прокси или систему исполнения. Статический сканер отвечает на вопрос «что заявлено в коде», а runtime-аудит — на вопрос «что фактически происходило». Эти результаты должны связываться по стабильному идентификатору агента и объединяться только на этапе отчётности.
+Agent Control Plane should be extended with a separate **runtime evidence layer**, not turned from a static scanner into a proxy or an execution system. The static scanner answers "what is declared in the code"; the runtime audit answers "what actually happened". These results must be linked by a stable agent identifier and merged only at the reporting stage.
 
-MVP должен принимать нормализованные события в формате JSON Lines, агрегировать фактические вызовы и сопоставлять их с результатом статического сканирования. На первом этапе система не должна исполнять инструменты, перехватывать секреты, менять политики или требовать конкретного observability-провайдера.
+The MVP must accept normalized events in JSON Lines format, aggregate actual calls and match them against the static scan result. At this stage the system must not execute tools, intercept secrets, change policies or require a specific observability provider.
 
-## Цели и ограничения
+## Goals and limits
 
-| Область | Входит в MVP | Не входит в MVP |
+| Area | In MVP | Not in MVP |
 |---|---|---|
-| Источники | Нормализованный JSONL, API Gateway JSON/JSONL, OpenTelemetry JSON export | Прямое подключение ко всем вендорам |
-| Формат | JSONL с нормализованным событием | Произвольный парсинг логов каждого продукта |
-| Аналитика | Число вызовов, успешность, уникальные цели, first/last seen | Поведенческая ML-детекция |
-| Сопоставление | `agent_id`, затем устойчивое имя с явным предупреждением | Неоднозначное автоматическое связывание без evidence |
-| Безопасность | Metadata-only, лимиты размера, отказ от payload/arguments | Сбор prompt, tool arguments и raw secrets |
-| Выход | JSON-отчёт и runtime findings | Enforcement и runtime proxy |
+| Sources | Normalized JSONL, API Gateway JSON/JSONL, OpenTelemetry JSON export | Direct integration with every vendor |
+| Format | JSONL with a normalized event | Ad-hoc parsing of each product's logs |
+| Analytics | Call counts, success rate, unique targets, first/last seen | Behavioral ML detection |
+| Matching | `agent_id`, then stable name with an explicit warning | Ambiguous automatic linking without evidence |
+| Security | Metadata-only, size limits, no payload/arguments | Collecting prompts, tool arguments and raw secrets |
+| Output | JSON report and runtime findings | Enforcement and runtime proxy |
 
-## Нормализованное событие
+## Normalized event
 
-Каждая строка входного потока представляет одно событие. Payload запроса и ответа намеренно отсутствуют. Идентификаторы и имена ограничиваются метаданными, необходимыми для аудита.
+Each input line represents one event. Request and response payloads are intentionally absent. Identifiers and names are limited to the metadata required for audit.
 
 ```json
 {
@@ -36,67 +36,67 @@ MVP должен принимать нормализованные событи�
 }
 ```
 
-Обязательные поля: `timestamp`, `agent_id` или `agent_name`, `operation`, `target`, `success`. Формальная схема опубликована в [`docs/runtime-event.v1.schema.json`](./runtime-event.v1.schema.json). Значения `operation` и `action` являются свободными строками на этапе MVP, чтобы не блокировать интеграции. Нормализатор должен отклонять пустые идентификаторы и некорректные timestamps.
+Required fields: `timestamp`, `agent_id` or `agent_name`, `operation`, `target`, `success`. The formal schema is published in [`docs/runtime-event.v1.schema.json`](./runtime-event.v1.schema.json). The `operation` and `action` values are free-form strings at the MVP stage so integrations are not blocked. The normalizer must reject empty identifiers and invalid timestamps.
 
-## Runtime-агрегат
+## Runtime aggregate
 
-Для каждого агента агрегируются следующие показатели:
+The following metrics are aggregated per agent:
 
-| Показатель | Назначение |
+| Metric | Purpose |
 |---|---|
-| `event_count` | Общий объём наблюдений |
-| `successful_events` и `failed_events` | Надёжность и ошибки интеграций |
-| `unique_targets` | Фактический scope инструментов и API |
-| `operations` | Разбивка по типам операций |
-| `providers` | Фактические model/API providers |
-| `first_seen` и `last_seen` | Окно наблюдения |
-| `undeclared_targets` | Цели, отсутствующие в статическом inventory |
-| `undeclared_providers` | Провайдеры, отсутствующие в декларации |
+| `event_count` | Total observation volume |
+| `successful_events` and `failed_events` | Reliability and integration errors |
+| `unique_targets` | Actual tool and API scope |
+| `operations` | Breakdown by operation type |
+| `providers` | Actual model/API providers |
+| `first_seen` and `last_seen` | Observation window |
+| `undeclared_targets` | Targets missing from the static inventory |
+| `undeclared_providers` | Providers missing from the declaration |
 
-Агрегаты сортируются детерминированно. Это необходимо для стабильных diff-отчётов и baseline-механизма, уже используемого статическим сканером. JSONL-источник агрегируется потоково и не удерживает весь список событий в памяти. Для envelope-форматов OpenTelemetry и API Gateway сначала выполняется безопасная нормализация, после чего применяется та же модель агрегата.
+Aggregates are sorted deterministically. This is required for stable diff reports and for the baseline mechanism already used by the static scanner. The JSONL source is aggregated as a stream and does not hold the full event list in memory. For the OpenTelemetry and API Gateway envelope formats, safe normalization runs first, then the same aggregate model is applied.
 
 ## Runtime findings
 
-Первый набор правил должен быть небольшим и проверяемым:
+The first rule set must be small and verifiable:
 
-| Правило | Условие | Начальная severity |
+| Rule | Condition | Initial severity |
 |---|---|---|
-| `ACP-R001` | Фактическая цель отсутствует в статическом inventory агента | High |
-| `ACP-R002` | Фактический provider отличается от заявленного | High |
-| `ACP-R003` | Production-агент обращается к цели с write-действием, хотя заявлен как read-only | Critical |
-| `ACP-R004` | Runtime-события невозможно надёжно сопоставить с агентом | Medium |
-| `ACP-R005` | Наблюдаемые события старше заданного окна свежести | Note |
+| `ACP-R001` | Actual target is missing from the agent's static inventory | High |
+| `ACP-R002` | Actual provider differs from the declared one | High |
+| `ACP-R003` | A production agent calls a target with a write action while declared read-only | Critical |
+| `ACP-R004` | Runtime events cannot be reliably matched to an agent | Medium |
+| `ACP-R005` | Observed events are older than the configured freshness window | Note |
 
-Правила должны создавать evidence только из безопасных полей: `request_id`, timestamp, operation и target. Никогда не следует помещать в finding prompt, аргументы инструмента, заголовки авторизации или тело ответа.
+Rules must build evidence only from safe fields: `request_id`, timestamp, operation and target. A finding must never contain a prompt, tool arguments, authorization headers or a response body.
 
-## План реализации
+## Implementation plan
 
-1. **Слой ingest.** Добавить потоковый JSONL reader с лимитом строки и лимитом общего числа событий.
-2. **Агрегация.** Добавить детерминированный runtime report с first/last seen и уникальными целями.
-3. **Сопоставление.** Сопоставить runtime agent с `scan.Report.Agents`; при отсутствии `agent_id` разрешать имя только при единственном совпадении.
-4. **Findings.** Добавить первые runtime rules без enforcement.
-5. **CLI.** Добавить отдельную команду `agentctl runtime-audit <events.jsonl> --inventory <report.json>` после стабилизации библиотечного API.
-6. **Интеграции.** Реализовать адаптеры для OpenTelemetry и API gateway после утверждения нормализованной схемы.
+1. **Ingest layer.** Add a streaming JSONL reader with a line-size limit and a total-event limit.
+2. **Aggregation.** Add a deterministic runtime report with first/last seen and unique targets.
+3. **Matching.** Match the runtime agent to `scan.Report.Agents`; when `agent_id` is absent, allow a name match only when it is unambiguous.
+4. **Findings.** Add the first runtime rules without enforcement.
+5. **CLI.** Add a separate `agentctl runtime-audit <events.jsonl> --inventory <report.json>` command once the library API is stable.
+6. **Integrations.** Implement OpenTelemetry and API gateway adapters once the normalized schema is approved.
 
-## Критерии готовности MVP
+## MVP readiness criteria
 
-MVP считается готовым, когда он обрабатывает поток минимум из 100 000 metadata-only событий с ограниченным потреблением памяти, не выводит запрещённые payload-поля, выдаёт одинаковый JSON для одинакового входа, корректно обрабатывает повреждённые строки с диагностикой и создаёт отдельные findings для undeclared target/provider.
+The MVP is ready when it processes a stream of at least 100,000 metadata-only events with bounded memory usage, never emits forbidden payload fields, produces identical JSON for identical input, handles corrupted lines with diagnostics, and creates separate findings for undeclared targets/providers.
 
-## Принцип безопасности
+## Security principle
 
-Runtime-аудит должен быть **наблюдателем, а не исполнителем**. Он не запускает команды из событий, не обращается к URL из полей `target`, не читает содержимое tool arguments и не принимает решения о выдаче доступа. Enforcement — отдельный будущий компонент с самостоятельной моделью угроз и процессом согласования.
+The runtime audit must be an **observer, not an executor**. It does not run commands from events, does not access URLs from `target` fields, does not read tool arguments and does not make access-granting decisions. Enforcement is a separate future component with its own threat model and approval process.
 
-## Реализовано в текущем этапе
+## Implemented in the current stage
 
-В репозитории реализован библиотечный слой `internal/runtime`, который выполняет безопасное чтение нормализованных JSONL-событий, детерминированную агрегацию и сопоставление со статическим `scan.Report`. Добавлены правила `ACP-R001` — `ACP-R004`, включая обнаружение undeclared target, фактического provider, production write activity и неоднозначного сопоставления агента.
+The repository implements the `internal/runtime` library layer, which performs safe reading of normalized JSONL events, deterministic aggregation and matching against the static `scan.Report`. Rules `ACP-R001` through `ACP-R004` are added, including detection of undeclared targets, actual providers, production write activity and ambiguous agent matching.
 
-Добавлена команда `agentctl runtime-audit <events> --inventory <report.json>`. Флаг `--source` выбирает `jsonl`, `otel-json` или `api-gateway`. Команда поддерживает text/json/SARIF output, `--baseline`, expiring `--suppressions`, атомарную запись через существующий механизм `--output` и CI-порог `--fail-on`.
+The `agentctl runtime-audit <events> --inventory <report.json>` command is added. The `--source` flag selects `jsonl`, `otel-json` or `api-gateway`. The command supports text/json/SARIF output, `--baseline`, expiring `--suppressions`, atomic writes through the existing `--output` mechanism and the `--fail-on` CI threshold.
 
-Для сравнения snapshots используется `agentctl runtime-diff before.json after.json`. Команда показывает добавленные, удалённые и неизменившиеся findings и поддерживает `--format text|json|csv|html`. Diff сравнивает стабильные finding IDs, поэтому его можно использовать в nightly security review и регрессионных CI-проверках.
+Snapshot comparison uses `agentctl runtime-diff before.json after.json`. The command shows added, removed and unchanged findings and supports `--format text|json|csv|html`. The diff compares stable finding IDs, so it can be used in nightly security reviews and regression CI checks.
 
-Адаптеры принимают только metadata-поля. OpenTelemetry spans преобразуются по атрибутам агента, инструмента, окружения, provider и HTTP-статуса. API Gateway записи поддерживают snake_case и camelCase идентификаторы, JSONL и JSON-массив. Payload запроса и ответа не читается и не переносится в нормализованное событие. Provider matching теперь выполняется на уровне конкретного агента: фактический provider считается заявленным только тогда, когда он принадлежит модели, указанной в `agent.models`. Normalized JSONL отклоняет sensitive keys (`prompt`, `arguments`, `request_body`, `response_body`, `headers`, `authorization`, `token` и аналогичные) и ограничивает длину metadata fields.
+Adapters accept metadata fields only. OpenTelemetry spans are converted using agent, tool, environment, provider and HTTP-status attributes. API Gateway records support snake_case and camelCase identifiers, JSONL and JSON arrays. Request and response payloads are neither read nor carried into the normalized event. Provider matching now works at the individual agent level: an actual provider counts as declared only when it belongs to a model listed in `agent.models`. Normalized JSONL rejects sensitive keys (`prompt`, `arguments`, `request_body`, `response_body`, `headers`, `authorization`, `token` and similar) and limits metadata field length.
 
-Следующий этап — добавить адаптеры OpenTelemetry и API gateway, не меняя нормализованный контракт событий.
+Next stage: add the OpenTelemetry and API gateway adapters without changing the normalized event contract.
 
 ## References
 
